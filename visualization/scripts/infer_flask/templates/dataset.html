@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Inferences Comparison - {{ data_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <h1>Select Size for {{ data_name }}</h1>
+    <div>
+        {% for size in sizes %}
+            <button onclick="location.href='{{ url_for('display_data_size', data_name=data_name, size=size) }}'">{{ size }}</button>
+        {% endfor %}
+        <button onclick="location.href='{{ url_for('display_data_all', data_name=data_name) }}'">All</button>
+    </div>
+</body>
+</html>

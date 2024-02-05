@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Inferences Comparison</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <h1>Dataset Selection</h1>
+    <div>
+        <button onclick="location.href='/dolly'">Dolly</button>
+        <button onclick="location.href='/cleaned_alpaca'">Cleaned Alpaca</button>
+        <button onclick="location.href='/all'">All</button>
+        <!-- ... [Add more buttons for other datasets as needed] -->
+    </div>
+    
+    {% if model_responses %}
+        <h2>Inferences Comparison</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Prompt</th>
+                    <th>Ground Truth</th>
+                    {% for model in model_responses %}
+                        <th class="{{ 'random' if 'random' in model else 'coreset' if 'coreset' in model else 'infoverse' if 'infoverse' in model else 'oe' if 'oe' in model else 'rouge'}}">{{ model }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for i in range(prompts|length) %}
+                    <tr>
+                        <td>{{ prompts[i] }}</td>
+                        <td>{{ ground_truth[i] }}</td>
+                        {% for model in model_responses %}
+                            <td class="{{ 'random' if 'random' in model else 'coreset' if 'coreset' in model else 'infoverse' if 'infoverse' in model else 'oe' if 'oe' in model else 'rouge' }}">{{ model_responses[model][i] }}</td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+</body>
+</html>
