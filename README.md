@@ -61,6 +61,8 @@ python scripts/sampling.py \
 --ftype (Optional): diverse/random/similar for selectllm and perp/length for perplexity/Length based sampling
 ```
 
+Note: Choose ftype as diverse to utilize the SelectLLM algorithm based on our paper
+
 Sampled dataset will be saved under `datasets/sampled/{data_set}/{sampling_type}/{n_instances}/{random_state}`
 
 ## Fine-tuning
