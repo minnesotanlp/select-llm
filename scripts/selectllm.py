@@ -457,8 +457,6 @@ class SelectSampler:
             query = self.prompt_local_select(data_train, global_regions[i], local_output)
             
             answer, input_token, output_token = self.call_api_sllm(query)
-            print(answer)
-            break
             
             try:
                 answer_aft = list(np.array(ast.literal_eval(answer)) - 1)
