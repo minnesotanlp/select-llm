@@ -178,7 +178,7 @@ class SelectSampler:
         return text
     
     def call_api(self, query):
-        model = 'gpt-3.5-turbo'
+        model = 'gpt-3.5-turbo-1106'
         waiting_time = 0.5
         
         response = None
@@ -373,7 +373,7 @@ class SelectSampler:
         return text
     
     def call_api_sllm(self, query):
-        model = "gpt-3.5-turbo"
+        model = "gpt-3.5-turbo-1106"
         waiting_time = 0.5
         
         response = None
@@ -384,7 +384,7 @@ class SelectSampler:
                 ]
                 
                     # ChatGPT API 호출하기
-                response = openai.ChatCompletion.create(
+                response = CLIENT.chat.completions.create(
                     model=model,
                     messages=messages,
                     temperature=0.0,
@@ -398,11 +398,12 @@ class SelectSampler:
                     break
         if response is not None:
             try:
-                answer = response['choices'][0]['message']['content']
+                answer = response.choices[0].message.content
             except:
                 answer = 'N/A'
-            n_input_tokens = response['usage']['prompt_tokens']
-            n_output_tokens = response['usage']['completion_tokens']
+            usage_data = dict(response.usage) if response.usage else {}
+            n_input_tokens = usage_data.get('prompt_tokens', 0)
+            n_output_tokens = usage_data.get('completion_tokens', 0)
         else:
             answer = 'N/A'
             n_input_tokens = 0
