@@ -56,10 +56,11 @@ For now, we use ready-made datasets to do sampling. Datasets are available under
 
 ```bash
 python scripts/sampling.py \
---sample_type random \
+--sample_type selectllm \
 --n_instances 1000 \
 --data_set dolly \
---random_state 2021
+--random_state 2021 \
+--ftype diverse
 ```
 
 ```
@@ -85,11 +86,12 @@ User can store model by creating the below defined llama path and model path giv
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python llama2/scripts/finetune.py \
---data_path datasets/sampled/dolly/random/1000/2021/sampled_random_1000.parquet.gzip \
---sample_type random \
+--data_path datasets/sampled/dolly/selectllm/diverse/1000/2021/sampled_selectllm_1000.parquet.gzip \
+--sample_type selectllm \
 --data_set dolly \
 --n_instances 1000 \
 --random_state 2021 \
+--ftype diverse \
 --llama_path llama_2_hf/Instructllama-2-7b/ \
 --model_path llama_2_hf/llama-2-7b/7bweights
 ```
@@ -97,7 +99,8 @@ CUDA_VISIBLE_DEVICES=0 python llama2/scripts/finetune.py \
 ```
 --data_path: Path to the saved sampled data given by:
 
-datasets/sampled/{data_set}/{sampling_type}/{n_instances}/{random_state}/sampled_{sampling_type}_{n_instances}.parquet.gzip
+datasets/sampled/{data_set}/{sampling_type}/{ftype}/{n_instances}/{random_state}/sampled_{sampling_type}_{n_instances}.parquet.gzip
+ftype is optional, so it can be omitted.
 
 --model_path: Path to where the llama 2 HuggingFace converted weights are stored
 
@@ -109,12 +112,13 @@ datasets/sampled/{data_set}/{sampling_type}/{n_instances}/{random_state}/sampled
 Generate inferences from the fine-tuned model with the test dataset.
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python llama2/scripts/generate_inferences_finetuned.py \
---sample_type random \
+CUDA_VISIBLE_DEVICES=0 python llama2/scripts/generated_inferences_finetuned.py \
+--sample_type selectllm \
 --data_set dolly \
 --n_instances 1000 \
 --det True \
 --random_state 2021 \
+--ftype diverse \
 --llama_path llama_2_hf/Instructllama-2-7b
 ```
 
@@ -128,6 +132,7 @@ Compare inferences to the ground-truth by cosine similarities, rouge, and perple
 ```bash
 CUDA_VISIBLE_DEVICES=0 python scripts/metrics.py \
 --data_set dolly \
---sample_type random \
---n_instances 1000
+--sample_type selectllm \
+--n_instances 1000 \
+--ftype diverse
 ```
