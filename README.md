@@ -13,10 +13,23 @@ git clone https://github.com/minnesotanlp/select-llm.git
 cd select-llm
 ```
 
-Install required packages. (`requirements.txt` includes all submodule packages.)
+Create a virtual environment. We recommend using Python version 3.10.6.
+
+```bash
+python -m venv select-llm-venv
+source select-llm-venv/bin/activate
+```
+
+Install required packages. (`requirements.txt` includes all submodule packages except flash-atten.)
 
 ```bash
 pip install -r requirements.txt
+```
+
+Additionally, install flash-atten package after installing `requirements.txt`.
+
+```bash
+pip install flash-attn==2.3.0
 ```
 
 Because SelectLLM is based on OPENAI's API, need to create an .env file to save API key.
