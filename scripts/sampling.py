@@ -375,7 +375,7 @@ class Sampler:
         assert self.n_instances == len(selected_data) 
         return selected_data
     
-    def diversity_sampling(self, n_instances: int, extract_validation: bool):
+    def diversity_sampling(self, n_instances: int):
         data_path = DATA_PATH.joinpath(self.data_set, 'data.json')
         rouge_folder_path = DATA_PATH.joinpath(self.data_set, 'rouge')
         rouge_file_path = DATA_PATH.joinpath(self.data_set, 'rouge', 'rouge.json')

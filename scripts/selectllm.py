@@ -178,7 +178,7 @@ class SelectSampler:
         return text
     
     def call_api(self, query):
-        model = 'gpt-3.5-turbo'
+        model = 'gpt-3.5-turbo-1106'
         waiting_time = 0.5
         
         response = None
@@ -373,7 +373,7 @@ class SelectSampler:
         return text
     
     def call_api_sllm(self, query):
-        model = "gpt-3.5-turbo"
+        model = "gpt-3.5-turbo-1106"
         waiting_time = 0.5
         
         response = None
