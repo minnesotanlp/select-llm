@@ -18,16 +18,26 @@ openai_config = dotenv_values(Path(__file__).parent.parent.joinpath(".env"))
 CLIENT = openai.OpenAI(api_key=openai_config["OPENAI_API_KEY"])
 
 class Coreset_Greedy:
-    def __init__(self, all_pts):
+    def __init__(self, all_pts, random_state):
         self.all_pts = np.array(all_pts)
         self.dset_size = len(all_pts)
         self.min_distances = None
         self.already_selected = []
+        self.random_state = random_state
 
         # reshape
         feature_len = self.all_pts.shape[1]
+
+        self._set_seed(self.random_state)
         
         # self.first_time = True
+
+    def _set_seed(self, random_state):
+        deterministic = True
+        random.seed(random_state)
+        np.random.seed(random_state)
+        torch.manual_seed(random_state)
+        torch.cuda.manual_seed_all(random_state)
 
     def update_dist(self, centers, only_new=True, reset_dist=False):
         if reset_dist:

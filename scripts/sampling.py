@@ -84,7 +84,7 @@ class Sampler:
         
         return sampled
 
-    def coreset_sampling(self, n_instances: int):
+    def CBS_Sbert(self, n_instances: int):
         '''
         Coreset Based Sampling with SBert Embeddings
         '''
@@ -165,7 +165,7 @@ class Sampler:
 
         return sampled
 
-    def instructor_sampling(self, n_instances: int):
+    def CBS_Instr(self, n_instances: int):
         '''
         Coreset Based Sampling with Instructor Embeddings
         '''
@@ -375,6 +375,30 @@ class Sampler:
         assert self.n_instances == len(selected_data) 
         return selected_data
     
+    def coreset_sampling(self):
+        from selectllm import Coreset_Greedy, SelectSampler
+        select_sampling = SelectSampler(self.n_instances, self.random_state, self.data_set, self.ftype)
+        train_sents = select_sampling.train_sents
+        train_embeddings = select_sampling.train_embeddings
+        data_train = select_sampling.data_train
+
+        # init_indices = data_train.sample(n=100).index
+        init_indices = np.random.choice(len(train_embeddings), size=100, replace=False).tolist()
+
+        coreset = Coreset_Greedy(train_embeddings, self.random_state)
+        # print([init_indices])
+        coreset_indices = coreset.sample(already_selected=init_indices, sample_size=self.n_instances)
+        # complex_1k_fin = np.vstack(complex_1k[0])
+
+        # indices = complex_1k_fin.flatten()
+        data_file = DATA_PATH.joinpath(self.data_set, 'data.json')
+        data = pd.read_csv(data_file)
+        selected_data = data.iloc[coreset_indices[0]]
+        # print(selected_data)
+
+        assert self.n_instances == len(selected_data) 
+        return selected_data
+    
     def diversity_sampling(self, n_instances: int):
         data_path = DATA_PATH.joinpath(self.data_set, 'data.json')
         rouge_folder_path = DATA_PATH.joinpath(self.data_set, 'rouge')
@@ -461,20 +485,22 @@ class Sampler:
         torch.cuda.manual_seed_all(random_state)
 
     def __call__(self):
-        assert self.sample_type in ['random', 'coreset', 'infoverse', 'instructor', 'rouge', 'oe', 'selectllm']
+        assert self.sample_type in ['random', 'coreset', 'infoverse', 'rouge', 'oe', 'selectllm', 'cbs_sbert', 'cbs_instr']
         
         if self.sample_type == 'random':
             sampled = self.random_sampling(self.n_instances, random_state=self.random_state)
-        elif self.sample_type == 'coreset':
-            sampled = self.coreset_sampling(self.n_instances)
-        elif self.sample_type == 'instructor':
-            sampled = self.instructor_sampling(self.n_instances)
+        elif self.sample_type == 'cbs_sbert':
+            sampled = self.CBS_Sbert(self.n_instances)
+        elif self.sample_type == 'cbs_instr':
+            sampled = self.CBS_Instr(self.n_instances)
         elif self.sample_type == 'rouge':
             sampled = self.diversity_sampling(self.n_instances)
         elif self.sample_type == 'oe':
             sampled = self.openended_sampling(self.n_instances)
         elif self.sample_type == 'selectllm':
             sampled = self.select_sampling()
+        elif self.sample_type == 'coreset':
+            sampled = self.coreset_sampling()
         else:
             sampled = self.infoverse_sampling(self.n_instances, self.data_set)
         
@@ -482,7 +508,7 @@ class Sampler:
 
 def get_args():
     parser = ArgumentParser(description="Sampler for active learning.")
-    parser.add_argument('--sample_type', default='coreset', choices=['random', 'coreset', 'infoverse', 'instructor', 'rouge','oe','selectllm'], help="Type of sampling algorithm to use.")
+    parser.add_argument('--sample_type', default='coreset', choices=['random', 'coreset', 'infoverse', 'rouge','oe','selectllm', 'cbs_sbert', 'cbs_instr'], help="Type of sampling algorithm to use.")
     parser.add_argument('--n_instances', type=int, default=1000, help="Number of instances to sample.")
     parser.add_argument('--data_set', default='all', help="Dataset to use for sampling.")
     parser.add_argument('--random_state', type=int, default=2023, help="Random state for reproducibility.")
