@@ -23,13 +23,10 @@ nltk.download('punkt')
 pd.options.mode.chained_assignment = None
 
 SAMPLED_PATH = Path(__file__).parent.parent.joinpath('datasets/sampled')
-VALIDATION_PATH = Path(__file__).parent.parent.joinpath('datasets/validation')
 DATA_PATH = Path(__file__).parent.parent.joinpath('datasets/data')
 
 if not SAMPLED_PATH.exists():
     SAMPLED_PATH.mkdir(parents=True)
-if not VALIDATION_PATH.exists():
-    VALIDATION_PATH.mkdir(parents=True)
 if not DATA_PATH.exists():
     DATA_PATH.mkdir(parents=True)
 
@@ -41,7 +38,6 @@ class Sampler:
         self.sample_type = args.sample_type
         self.n_instances = args.n_instances
         self.random_state = args.random_state
-        self.extract_validation = args.extract_validation
         self.data_set = args.data_set
         self.ftype = args.ftype
         self._set_seed(self.random_state)
@@ -60,17 +56,13 @@ class Sampler:
         
         return sampled_results
 
-    def save_sampled(self, sampled: pd.DataFrame, sampling_type: str, n_instances: int, extract_validation: bool = False):
-        if extract_validation:
-            sampled.to_parquet(VALIDATION_PATH.joinpath(f'validation_{sampling_type}_{n_instances}.parquet.gzip'), compression='gzip')
-            print(f"Save validation dataset in {VALIDATION_PATH}.")
+    def save_sampled(self, sampled: pd.DataFrame, sampling_type: str, n_instances: int):
+        if self.sample_type in ['length', 'selectllm', 'perplexity']:
+            path = SAMPLED_PATH.joinpath(f'{self.data_set}/{self.sample_type}/{self.ftype}/{self.n_instances}/{self.random_state}')
         else:
-            if self.sample_type in ['infoverse', 'selectllm']:
-                path = SAMPLED_PATH.joinpath(f'{self.data_set}/{self.sample_type}/{self.ftype}/{self.n_instances}/{self.random_state}')
-            else:
-                path = SAMPLED_PATH.joinpath(f'{self.data_set}/{self.sample_type}/{self.n_instances}/{self.random_state}')
-            if not path.exists():
-                path.mkdir(parents=True)
+            path = SAMPLED_PATH.joinpath(f'{self.data_set}/{self.sample_type}/{self.n_instances}/{self.random_state}')
+        if not path.exists():
+            path.mkdir(parents=True)
                 
             sampled.to_parquet(path.joinpath(f'sampled_{sampling_type}_{n_instances}.parquet.gzip'), compression='gzip')
             print(f"Save sampled dataset in {path}.")
@@ -81,7 +73,7 @@ class Sampler:
             n=n_instances,
             random_state=random_state,
         )
-        
+        assert self.n_instances == len(sampled), 'Random Sampling Length Mismatch'
         return sampled
 
     def CBS_Sbert(self, n_instances: int):
@@ -163,6 +155,7 @@ class Sampler:
 
         sampled = sentences_df.loc[indices, ['instruction', 'input', 'output']]
 
+        assert self.n_instances == len(sampled), 'CBS_Sbert Sampling Length Mismatch'
         return sampled
 
     def CBS_Instr(self, n_instances: int):
@@ -205,8 +198,6 @@ class Sampler:
 
         normalized_embeddings = list(map(self._l2_normalization, embeddings))
         normalized_embeddings = pd.Series(normalized_embeddings)
-        #Double Check: Clarify name of baseline (with Paper Citation) 
-        #Coreset Code from jaehyung
         min_cluster_size = 6
         min_samples = 4
         clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, min_samples=min_samples)
@@ -235,9 +226,11 @@ class Sampler:
 
         sampled = sentences_df.loc[indices, ['instruction', 'input', 'output']]
 
+        assert self.n_instances == len(sampled), 'CBS_Instr Sampling Length Mismatch'
         return sampled
-
-    def infoverse_sampling(self, n_instances: int, data_set: str):
+    
+    #To do: Testing
+    def length_sampling(self, n_instances: int, data_set: str):
         prompts_path = DATA_PATH.joinpath(self.data_set, 'data.json')
         inferences_path = DATA_PATH.joinpath(self.data_set, 'preds.json')
         gt_path = DATA_PATH.joinpath(self.data_set, 'gts.json')
@@ -251,40 +244,55 @@ class Sampler:
 
         metrics = InfoMetrics(self.data_set)
         data_length = metrics.get_length(total)
-        data_rouge = metrics.get_rouge(total_infr, total_orig)
-        data_perp = metrics.get_perp(total_infr)
-        total['lengths'] = np.array(data_length)
-        total['perp'] = np.array(data_perp)
-        total['rouge'] = np.array(data_rouge)
 
-        if self.ftype == 'combined':
-            total_filtered = total[
-                ((total['perp'] > 0.3)) & 
-                ((total['rouge'] > 0.005) & (total['rouge'] < 0.7))
-            ]
-        elif self.ftype == 'perp':
-            total_filtered = total.sort_values('perp', ascending=True)[['instruction', 'input', 'output']]
-        elif self.ftype == 'perph':
-            total_filtered = total.sort_values('perp', ascending=False)[['instruction', 'input', 'output']]
-        elif self.ftype == 'perpm':
-            total_sorted = total.sort_values('perp')
-            middle_index = len(total_sorted) // 2
-            half_n = self.n_instances // 2 #Assuming n is even
-            start_index = middle_index - half_n
-            end_index = middle_index + half_n
-            total_filtered = total_sorted.iloc[start_index:end_index][['instruction', 'input', 'output', 'perp']]
-        elif self.ftype == 'rouge':
-            total_filtered = total.sort_values('rouge', ascending=False)[['instruction', 'input', 'output']]
-        elif self.ftype =='length_small':
+        total['lengths'] = np.array(data_length)
+
+        if self.ftype =='short':
             total['normalized_lengths'] = (total['lengths'] - total['lengths'].min()) / (total['lengths'].max() - total['lengths'].min())
             total_filtered = total.sort_values('normalized_lengths', ascending=True)
-        elif self.ftype =='length_big':
+        elif self.ftype =='long':
             total['normalized_lengths'] = (total['lengths'] - total['lengths'].min()) / (total['lengths'].max() - total['lengths'].min())
             total_filtered = total.sort_values('normalized_lengths', ascending=False)[['instruction', 'input', 'output', 'normalized_lengths']]
 
         total_filtered = total_filtered.reset_index(drop=True)
         sampled = total_filtered.loc[((total_filtered.index>=0) & (total_filtered.index<n_instances)), ['instruction', 'input', 'output']]
 
+        assert self.n_instances == len(sampled), 'Length Sampling Length Mismatch'
+        return sampled
+
+    #To do: Testing
+    def perplexity_sampling(self, n_instances: int, data_set: str):
+        prompts_path = DATA_PATH.joinpath(self.data_set, 'data.json')
+        inferences_path = DATA_PATH.joinpath(self.data_set, 'preds.json')
+        gt_path = DATA_PATH.joinpath(self.data_set, 'gts.json')
+        total = pd.read_csv(prompts_path)
+        total[['instruction', 'input', 'output']] = total[['instruction', 'input', 'output']].fillna('')
+
+        with open(inferences_path, 'r') as f:
+            total_infr = json.load(f)
+        with open(gt_path, 'r') as f:
+            total_orig = json.load(f)
+
+        metrics = InfoMetrics(self.data_set)
+        data_perp = metrics.get_perp(total_infr)
+        total['perp'] = np.array(data_perp)
+
+        if self.ftype == 'low':
+            total_filtered = total.sort_values('perp', ascending=True)[['instruction', 'input', 'output']]
+        elif self.ftype == 'high':
+            total_filtered = total.sort_values('perp', ascending=False)[['instruction', 'input', 'output']]
+        elif self.ftype == 'medium':
+            total_sorted = total.sort_values('perp')
+            middle_index = len(total_sorted) // 2
+            half_n = self.n_instances // 2 #Assuming n is even
+            start_index = middle_index - half_n
+            end_index = middle_index + half_n
+            total_filtered = total_sorted.iloc[start_index:end_index][['instruction', 'input', 'output', 'perp']]
+
+        total_filtered = total_filtered.reset_index(drop=True)
+        sampled = total_filtered.loc[((total_filtered.index>=0) & (total_filtered.index<n_instances)), ['instruction', 'input', 'output']]
+
+        assert self.n_instances == len(sampled), 'Perplexity Sampling Length Mismatch'
         return sampled
 
     def openended_sampling(self, n_instances):
@@ -298,7 +306,7 @@ class Sampler:
         for i,infers_dict in enumerate(inferences):
             prompt = list(infers_dict.keys())[0]
             if prompt == "what are the different types of music genres ":
-                print(infers_dict)
+                # print(infers_dict)
             sent1 = infers_dict[prompt][0]
             sent2 = infers_dict[prompt][1]
             sent3 = infers_dict[prompt][2]
@@ -326,24 +334,11 @@ class Sampler:
         final_indices = sorted(final_indices)
         prompts = list(bigram_dict.keys())
         scores = list(bigram_dict.values())
-        print("length of scores:", len(scores))
+        # print("length of scores:", len(scores))
         answers = list(answers_dict.keys())
         final_data = data.iloc[final_indices]
 
-        print(f"\nUnique Bigram Score: {scores[0]} \nPrompt:\n{prompts[0]}\n\nanswers:\n{answers[0]}\n")
-        print(f"\nUnique Bigram Score: {scores[1]} \nPrompt:\n{prompts[1]}\n\nanswers:\n{answers[1]}\n")
-        print(f"\nUnique Bigram Score: {scores[2]} \nPrompt:\n{prompts[2]}\n\nanswers:\n{answers[2]}\n")
-        print(f"\nUnique Bigram Score: {scores[3]} \nPrompt:\n{prompts[3]}\n\nanswers:\n{answers[3]}\n")
-        print(f"\nUnique Bigram Score: {scores[4]} \nPrompt:\n{prompts[4]}\n\nanswers:\n{answers[4]}\n")
-        print(f"\nUnique Bigram Score: {scores[5]} \nPrompt:\n{prompts[5]}\n\nanswers:\n{answers[5]}\n")
-        print(f"\nUnique Bigram Score: {scores[6]} \nPrompt:\n{prompts[6]}\n\nanswers:\n{answers[6]}\n")
-        print(f"\nUnique Bigram Score: {scores[-1]} \nPrompt:\n{prompts[-1]}\n\nanswers:\n{answers[-1]}\n")
-        print(f"\nUnique Bigram Score: {scores[-2]} \nPrompt:\n{prompts[-2]}\n\nanswers:\n{answers[-2]}\n")
-        print(f"\nUnique Bigram Score: {scores[-3]} \nPrompt:\n{prompts[-3]}\n\nanswers:\n{answers[-3]}\n")
-        print(f"\nUnique Bigram Score: {scores[-4]} \nPrompt:\n{prompts[-4]}\n\nanswers:\n{answers[-4]}\n")
-        print(f"\nUnique Bigram Score: {scores[-5]} \nPrompt:\n{prompts[-5]}\n\nanswers:\n{answers[-5]}\n")
-        print(f"\nUnique Bigram Score: {scores[-6]} \nPrompt:\n{prompts[-6]}\n\nanswers:\n{answers[-6]}\n")
-
+        assert self.n_instances == len(final_data), 'openEnded Sampling Length Mismatch'
         return final_data
 
     def select_sampling(self):
@@ -372,7 +367,7 @@ class Sampler:
         data = pd.read_csv(data_file)
         selected_data = data.iloc[indices]
 
-        assert self.n_instances == len(selected_data) 
+        assert self.n_instances == len(selected_data), 'SelectLLM Sampling Length Mismatch'
         return selected_data
     
     def coreset_sampling(self):
@@ -396,7 +391,7 @@ class Sampler:
         selected_data = data.iloc[coreset_indices[0]]
         # print(selected_data)
 
-        assert self.n_instances == len(selected_data) 
+        assert self.n_instances == len(selected_data), 'Coreset Sampling Length Mismatch'
         return selected_data
     
     def diversity_sampling(self, n_instances: int):
@@ -485,7 +480,7 @@ class Sampler:
         torch.cuda.manual_seed_all(random_state)
 
     def __call__(self):
-        assert self.sample_type in ['random', 'coreset', 'infoverse', 'rouge', 'oe', 'selectllm', 'cbs_sbert', 'cbs_instr']
+        assert self.sample_type in ['random', 'coreset', 'length', 'perplexity', 'rouge', 'oe', 'selectllm', 'cbs_sbert', 'cbs_instr']
         
         if self.sample_type == 'random':
             sampled = self.random_sampling(self.n_instances, random_state=self.random_state)
@@ -501,25 +496,29 @@ class Sampler:
             sampled = self.select_sampling()
         elif self.sample_type == 'coreset':
             sampled = self.coreset_sampling()
-        else:
-            sampled = self.infoverse_sampling(self.n_instances, self.data_set)
+        elif self.sample_type == 'length':
+            sampled = self.length_sampling(self.n_instances, self.data_set)
+        elif self.sample_type == 'perplexity':
+            sampled = self.perplexity_sampling(self.n_instances, self.data_set)
         
-        self.save_sampled(sampled, self.sample_type, self.n_instances, self.extract_validation)
+        self.save_sampled(sampled, self.sample_type, self.n_instances)
 
 def get_args():
     parser = ArgumentParser(description="Sampler for active learning.")
-    parser.add_argument('--sample_type', default='coreset', choices=['random', 'coreset', 'infoverse', 'rouge','oe','selectllm', 'cbs_sbert', 'cbs_instr'], help="Type of sampling algorithm to use.")
+    parser.add_argument('--sample_type', default='coreset', choices=['random', 'coreset', 'length', 'perplexity', 'rouge','oe','selectllm', 'cbs_sbert', 'cbs_instr'], help="Type of sampling algorithm to use.")
     parser.add_argument('--n_instances', type=int, default=1000, help="Number of instances to sample.")
     parser.add_argument('--data_set', default='all', help="Dataset to use for sampling.")
     parser.add_argument('--random_state', type=int, default=2023, help="Random state for reproducibility.")
-    parser.add_argument('--extract_validation', type = bool, default = False, help="Whether to extract validation set.")
-    parser.add_argument('--ftype', type=str, help="Type of infoverse single feature (all/perp/rouge/length) or SelectLLM:similar/diverse/random")
+    parser.add_argument('--ftype', type=str, help="Length:[long, short], Perplexity:[low, high, medium] SelectLLM:[similar, diverse, random]")
     
     return parser.parse_args()
-
 
 if __name__ == '__main__':
 
     args = get_args()
     sampler = Sampler(args)
     sampler()
+
+'''To do:
+1) Add Simple Testing functions for each sampling technique
+'''
