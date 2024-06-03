@@ -40,6 +40,7 @@ class Sampler:
         self.random_state = args.random_state
         self.data_set = args.data_set
         self.ftype = args.ftype
+        self.local_selection_model = args.local_model
         self._set_seed(self.random_state)
 
     def load_dataset(self):
@@ -57,15 +58,17 @@ class Sampler:
         return sampled_results
 
     def save_sampled(self, sampled: pd.DataFrame, sampling_type: str, n_instances: int):
-        if self.sample_type in ['length', 'selectllm', 'perplexity']:
+        if self.sample_type in ['length', 'perplexity']:
             path = SAMPLED_PATH.joinpath(f'{self.data_set}/{self.sample_type}/{self.ftype}/{self.n_instances}/{self.random_state}')
+        elif self.sample_type == 'selectllm':
+            path = SAMPLED_PATH.joinpath(f'{self.data_set}/{self.sample_type}/{self.ftype}/{self.local_selection_model}/{self.n_instances}/{self.random_state}')
         else:
             path = SAMPLED_PATH.joinpath(f'{self.data_set}/{self.sample_type}/{self.n_instances}/{self.random_state}')
         if not path.exists():
             path.mkdir(parents=True)
                 
-            sampled.to_parquet(path.joinpath(f'sampled_{sampling_type}_{n_instances}.parquet.gzip'), compression='gzip')
-            print(f"Save sampled dataset in {path}.")
+        sampled.to_parquet(path.joinpath(f'sampled_{sampling_type}_{n_instances}.parquet.gzip'), compression='gzip')
+        print(f"Save sampled dataset in {path}.")
 
     def random_sampling(self, n_instances: int, random_state: int):
         total = self.load_dataset()
@@ -305,7 +308,7 @@ class Sampler:
         answers_dict = {}
         for i,infers_dict in enumerate(inferences):
             prompt = list(infers_dict.keys())[0]
-            if prompt == "what are the different types of music genres ":
+            # if prompt == "what are the different types of music genres ":
                 # print(infers_dict)
             sent1 = infers_dict[prompt][0]
             sent2 = infers_dict[prompt][1]
@@ -343,7 +346,7 @@ class Sampler:
 
     def select_sampling(self):
         from selectllm import SelectSampler
-        select_sampling = SelectSampler(self.n_instances, self.random_state, self.data_set, self.ftype)
+        select_sampling = SelectSampler(self.n_instances, self.random_state, self.data_set, self.ftype, self.local_selection_model)
         train_sents = select_sampling.train_sents
         n_size = select_sampling.n_size
         train_embeddings = select_sampling.train_embeddings
@@ -381,7 +384,6 @@ class Sampler:
         init_indices = np.random.choice(len(train_embeddings), size=100, replace=False).tolist()
 
         coreset = Coreset_Greedy(train_embeddings, self.random_state)
-        # print([init_indices])
         coreset_indices = coreset.sample(already_selected=init_indices, sample_size=self.n_instances)
         # complex_1k_fin = np.vstack(complex_1k[0])
 
@@ -389,7 +391,6 @@ class Sampler:
         data_file = DATA_PATH.joinpath(self.data_set, 'data.json')
         data = pd.read_csv(data_file)
         selected_data = data.iloc[coreset_indices[0]]
-        # print(selected_data)
 
         assert self.n_instances == len(selected_data), 'Coreset Sampling Length Mismatch'
         return selected_data
@@ -505,11 +506,12 @@ class Sampler:
 
 def get_args():
     parser = ArgumentParser(description="Sampler for active learning.")
-    parser.add_argument('--sample_type', default='coreset', choices=['random', 'coreset', 'length', 'perplexity', 'rouge','oe','selectllm', 'cbs_sbert', 'cbs_instr'], help="Type of sampling algorithm to use.")
-    parser.add_argument('--n_instances', type=int, default=1000, help="Number of instances to sample.")
-    parser.add_argument('--data_set', default='all', help="Dataset to use for sampling.")
-    parser.add_argument('--random_state', type=int, default=2023, help="Random state for reproducibility.")
-    parser.add_argument('--ftype', type=str, help="Length:[long, short], Perplexity:[low, high, medium] SelectLLM:[similar, diverse, random]")
+    parser.add_argument('-s','--sample_type', default='coreset', choices=['random', 'coreset', 'length', 'perplexity', 'rouge','oe','selectllm', 'cbs_sbert', 'cbs_instr'], help="Type of sampling algorithm to use.")
+    parser.add_argument('-n','--n_instances', type=int, default=1000, help="Number of instances to sample.")
+    parser.add_argument('-d','--data_set', default='all', help="Dataset to use for sampling. Options:[cleaned_alpaca, dolly]")
+    parser.add_argument('-r','--random_state', type=int, default=2023, help="Random state for reproducibility.")
+    parser.add_argument('-f','--ftype', type=str, help="Length:[long, short], Perplexity:[low, high, medium] SelectLLM:[similar, diverse, random]")
+    parser.add_argument('-l','--local_model', type=str, help="Model for SelectLLM. Options: [gpt3.5, mixtral]")
     
     return parser.parse_args()
 

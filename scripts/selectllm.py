@@ -11,6 +11,7 @@ from pathlib import Path
 from tqdm import tqdm
 from dotenv import dotenv_values
 from sentence_transformers import SentenceTransformer
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from sklearn.metrics import pairwise_distances, pairwise
 from sklearn.cluster import KMeans
 
@@ -73,16 +74,16 @@ class Coreset_Greedy:
             new_batch.append(ind)
         
         max_distance = max(self.min_distances)
-        #print("Max distance from cluster : %0.2f" % max_distance)
 
         return new_batch, max_distance
 
 class SelectSampler:
-    def __init__(self, n_instances, random_state, data_set, ftype):
+    def __init__(self, n_instances, random_state, data_set, ftype, local_selection_model):
         self.n_instances = n_instances
         self.random_state = random_state
         self.data_set = data_set
         self.ftype = ftype
+        self.local_selection_model = local_selection_model
         self._set_seed(self.random_state)
 
         if self.data_set == 'dolly':
@@ -91,6 +92,10 @@ class SelectSampler:
             self.n_size = 51
         
         self._set_embed()
+        if self.local_selection_model == 'mixtral':
+            self._load_mixtral_model()
+        elif self.local_selection_model == 'llama':
+            self._load_llama_model()
     
     def _set_seed(self, random_state):
         deterministic = True
@@ -113,253 +118,27 @@ class SelectSampler:
         model = SentenceTransformer('all-MiniLM-L6-v2')
         self.train_embeddings = np.zeros((len(self.train_sents), 768))
         self.train_embeddings = model.encode(self.train_sents)
-
-    def prompt_rerank_subset(self, dataset_train, indices, num):
-        text = ""
-        n_samples = len(indices)
-        text = f"I'm an intelligent assistant that can select {num} instructions that will be most impactful and informative when annotated by humans.\n\n"
-        text += f"The following are {n_samples} candidate instructions that describe a task, each indicated by a number identifier [].\n\n"
-        
-        for i in range(len(indices)):
-            text += f"[{i+1}]\n\n"
-            text += f"### Instruction:\n {dataset_train['instruction'][indices[i]]}\n\n"
-            if type(dataset_train['input'][indices[i]]) == str:
-                text += f"### Input:\n {dataset_train['input'][indices[i]]}\n\n"
-        
-        example1 = str(list(1 + np.arange(num))) 
-        example2 = str(list(1 + num + np.arange(num)))
-        text += f"I will select {num} instructions above based on their impactfulness and informativeness when labeled by humans. The output format should be [], e.g., {example1} or {example2}.\n\n"
-        text += f"The most impactful {num} instructions (only identifiers) are:"
-        
-        return text
     
-    def prompt_rerank_subset_complex(self, dataset_train, indices, num):
-        text = ""
-        n_samples = len(indices)
-        
-        text += f"The following are {n_samples} candidate instructions that describe a task, each indicated by a number identifier [].\n\n"
-        
-        for i in range(len(indices)):
-            text += f"[{i+1}]\n\n"
-            text += f"### Instruction:\n {dataset_train['instruction'][indices[i]]}\n\n"
-            if type(dataset_train['input'][indices[i]]) == str:
-                text += f"### Input:\n {dataset_train['input'][indices[i]]}\n\n"
-        
-        example1 = str(list(1 + np.arange(num))) 
-        example2 = str(list(1 + num + np.arange(num)))
-        
-        text += f"Examine the provided list of {n_samples} instructions, each uniquely identified by a number in brackets []. " 
-        text += f"Your task is to select {num} instructions that will be annotated by human annotators for model fine-tuning. "
-        text += f"Look for instructions that are clear and relevant, exhibit a high level of complexity and detail, represent a diverse range of scenarios and contexts, offer significant instructional value and potential learning gain, and present unique challenges and specificity. "
-        text += f"These selected instructions should ideally be the most beneficial for model fine-tuning after being annotated by human annotators. Present your selections using the format []. e.g., {example1} or {example2}.\n\n"
-        text += f"The most impactful {num} instructions (only identifiers) are:"
-        
-        return text
+    def _load_mixtral_model(self):
+        print(f'Loading {self.local_selection_model} model')
+        self.mixtral_model_id = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+        self.mixtral_tokenizer = AutoTokenizer.from_pretrained(self.mixtral_model_id)
+        self.mixtral_model = AutoModelForCausalLM.from_pretrained(self.mixtral_model_id, load_in_4bit=True, device_map="auto")
+        print('model loaded\n')
     
-    def prompt_rerank_subset_complex_v2(self, dataset_train, indices, num, cot=False):
-        text = ""
-        n_samples = len(indices)
-        
-        text += f"The following are {n_samples} unannotated examples of instructions that describe a task, each indicated by a number identifier [].\n\n"
-        
-        for i in range(len(indices)):
-            text += f"[{i+1}]\n\n"
-            text += f"### Instruction:\n {dataset_train['instruction'][indices[i]]}\n\n"
-            if type(dataset_train['input'][indices[i]]) == str:
-                text += f"### Input:\n {dataset_train['input'][indices[i]]}\n\n"
-            else:
-                text += f"### Input:\n N\A\n\n"
-        example1 = str(list(1 + np.arange(num))) 
-        example2 = str(list(1 + num + np.arange(num)))
-        
-        text += f"Please identify and select {num} most impactful and educational unannotated examples of instructions from a given set. These instructions should be evaluated based on their potential to enhance the performance and understanding of AI models when annotated by human experts. Criteria for selection should include:\n"
-        text += f"1. Complexity and Depth: Instructions that present a complex idea or task, offering depth in subject matter, which can challenge and therefore improve the model's learning capabilities.\n"
-        text += f"2. Diversity of Topics: Choose instructions covering a wide range of subjects. This ensures that the model gains experience across various fields and contexts, enhancing its versatility.\n"
-        text += f"3. Clarity and Specificity: Instructions should be clear yet detailed, providing specific scenarios or contexts that can guide precise and informative annotations.\n"
-        text += f"4. Relevance and Application: Prefer instructions that are relevant to real-world applications or common queries, as these are likely to be encountered by models in practical settings.\n"
-        text += f"5. Instructional Value: Instructions that not only provide direct information but also guide the model in understanding underlying concepts or methodologies.\n"
-        
-        text += f"Present your selections using the format []. e.g., {example1} or {example2}.\n\n"
-        if cot:
-            text += f"Also, for each selected instruction, explain why it was chosen, focusing on how it meets the above criteria and its potential contribution to model fine-tuning."
-        else:    
-            text += f"The most impactful {num} instructions (only identifiers) are:"
-            
-        return text
-    
-    def call_api(self, query):
-        model = 'gpt-3.5-turbo-1106'
-        waiting_time = 0.5
-        
-        response = None
-        while response is None:
-            try:
-                messages = [
-                        {'role': 'system', 'content': query},
-                ]
-                
-                # Call OpenAI API
-                response = CLIENT.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    temperature=0.0,
-                    max_tokens=256
-                )
-            except:
-                time.sleep(waiting_time)
-                if waiting_time < 5:
-                    waiting_time += 0.5
-                else:
-                    break
-        if response is not None:
-            try:
-                answer = response['choices'][0]['message']['content']
-            except:
-                answer = 'N/A'
-        else:
-            answer = 'N/A'
-            
-        return answer
-    
-    def call_api_gpt4(self, query):
-        model = 'gpt-4-1106-preview'
-        waiting_time = 0.5
-        
-        response = None
-        while response is None:
-            try:
-                messages = [
-                        {'role': 'system', 'content': query},
-                ]
-                
-                # Call OpenAI API
-                response = CLIENT.chat.completion.create(
-                    model=model,
-                    messages=messages,
-                    temperature=0.0,
-                    max_tokens=256
-                )
-            except:
-                time.sleep(waiting_time)
-                if waiting_time < 5:
-                    waiting_time += 0.5
-                else:
-                    break
-        if response is not None:
-            try:
-                answer = response['choices'][0]['message']['content']
-            except:
-                answer = 'N/A'
-        else:
-            answer = 'N/A'
-            
-        return answer
-    
-    def get_random_divide(self, train_embeddings, region_size, n_regions):
-        n_samples = len(train_embeddings)
-        rand_indices = np.random.permutation(n_samples)
-        
-        gap = region_size * n_regions - n_samples
-        rand_indices = np.array(list(rand_indices) + list(rand_indices[:gap]))
-
-        res = []
-        for i in range(n_regions):
-            res.append(rand_indices[region_size * i : region_size * (i+1)])
-        return res
-    
-    def get_diverse_divide(self, train_embeddings, region_size, n_regions):
-        n_samples = len(train_embeddings)
-        rand_indices = np.random.permutation(n_samples)
-        gap = region_size * n_regions - n_samples
-
-        remained_indices = list(np.arange(n_samples)) + list(rand_indices[:gap])
-        res = []
-        for i in tqdm(range(n_regions)):
-            coreset_i = Coreset_Greedy(train_embeddings[np.array(remained_indices).astype(np.int64)])
-            select_u = coreset_i.sample(already_selected=[0], sample_size=region_size-1)[0]
-            select_u = np.array([0] + select_u).astype(np.int64)
-            select_u = np.sort(select_u)[::-1]
-            
-            res_i = []
-            for idx in select_u:
-                res_i.append(remained_indices[idx])
-                del remained_indices[idx]        
-            res.append(np.array(res_i).astype(np.int64))
-        return res
-    
-    def get_similar_divide(self, train_embeddings, region_size, n_regions):
-        n_samples = len(train_embeddings)
-        gap = region_size * n_regions - n_samples
-
-        rand_indices = np.random.permutation(n_samples)
-        expand_indices = list(np.arange(n_samples)) + list(rand_indices[:gap])
-        train_embeddings_expand = train_embeddings[np.array(expand_indices).astype(np.int64)]
-        
-        coreset_init = Coreset_Greedy(train_embeddings_expand)
-        init_index = int(np.random.randint(0, n_samples, (1,)))
-        select_init = coreset_init.sample(already_selected=[init_index], sample_size=n_regions - 1)[0]
-        select_init = np.array([init_index] + select_init).astype(np.int64)
-
-        train_embeddings_centers = train_embeddings_expand[np.array(select_init).astype(np.int64)]
-        dist_to_centers = pairwise.euclidean_distances(train_embeddings_expand, train_embeddings_centers)
-
-        res = []
-        
-        for i in range(n_regions):
-            sorted_indices = np.argsort(dist_to_centers[:, i])
-            res.append(sorted_indices[region_size * i:region_size * (i+1)] % n_samples)
-            dist_to_centers[region_size * i:region_size * (i+1)] = 20000 # To prevent duplicated selection (20000 is random high value)
-        
-        return res
-    
-    def ours_v1(self, data_train, train_embeddings, local_output, n_outputs, p_method='simple', g_method='random', g_pre=False):
-        n_samples = len(train_embeddings)
-        region_size = math.ceil(n_samples / n_outputs)
-
-        if g_pre:
-            global_regions = g_method
-        else:
-            if g_method == 'random':
-                global_regions = self.get_random_divide(train_embeddings, region_size, n_outputs)
-            elif g_method == 'diverse':
-                global_regions = self.get_diverse_divide(train_embeddings, region_size, n_outputs)
-            elif g_method == 'similar':
-                global_regions = self.get_similar_divide(train_embeddings, region_size, n_outputs)
-            else:
-                raise ValueError("Wrong designation of global method")
-
-        res = []
-        res_bef = []
-        for i in tqdm(range(len(global_regions))):
-            if p_method == 'simple':
-                query = self.prompt_rerank_subset(data_train, global_regions[i], local_output)
-            elif p_method == 'complex_v2':
-                query = self.prompt_rerank_subset_complex_v2(data_train, global_regions[i], local_output)
-            else:
-                query = self.prompt_rerank_subset_complex(data_train, global_regions[i], local_output)
-            
-            answer = self.call_api(query)
-            
-            try:
-                answer_aft = list(np.array(ast.literal_eval(answer)) - 1)
-                if len(answer_aft) > local_output:
-                    answer_aft = list(np.array(answer_aft)[:local_output])
-            except:
-                answer_aft = np.arange(local_output) + 1  
-            
-            res_bef.append(global_regions[i])
-            try:
-                res.append(global_regions[i][answer_aft])
-            except:
-                answer_aft = np.array([item[0] for item in answer_aft]).astype(np.int64)
-                res.append(global_regions[i][answer_aft])
-            
-        return res, res_bef
-
-    #Final SelectLLM Global and Local Division Scripts
+    def _load_llama_model(self):
+        print(f'Loading {self.local_selection_model} model')
+        self.llama_model_id = "meta-llama/Meta-Llama-3-70B-Instruct"
+        self.llama_pipeline = pipeline(
+            "text-generation",
+            model=self.llama_model_id,
+            model_kwargs={"torch_dtype": torch.bfloat16},
+            device_map="auto",
+        )
+        self.llama_tokenizer = self.llama_pipeline.tokenizer
+        print('model loaded\n')
 
     def prompt_local_select(self, dataset_train, indices, num):
-        #Final SelectLLM Prompt
         text = ""
         n_samples = len(indices)
 
@@ -421,6 +200,48 @@ class SelectSampler:
             
         return answer, n_input_tokens, n_output_tokens
     
+    def call_mx_sllm(self, query):
+        answer = None
+        messages = [
+                {"role": "user", "content": query},
+        ]
+        
+        input_ids = self.mixtral_tokenizer.apply_chat_template(messages, return_tensors="pt").to("cuda")
+        input_text = self.mixtral_tokenizer.decode(input_ids[0], skip_special_tokens=True)
+        outputs = self.mixtral_model.generate(input_ids, max_new_tokens=40)
+        answer = self.mixtral_tokenizer.decode(outputs[0], skip_special_tokens=True)
+        answer = answer[len(input_text):].strip()
+        n_input_tokens = input_ids.shape[1]
+        n_output_tokens = outputs.shape[1]
+        return answer, n_input_tokens, n_output_tokens
+    
+    def call_llama_sllm(self, query):
+        messages = [
+            {"role": "system", "content": "You are an intelligent chatbot that will carefully answer the user query"},
+            {"role": "user", "content": query},
+        ]
+
+        terminators = [
+            self.llama_tokenizer.eos_token_id,
+            self.llama_tokenizer.convert_tokens_to_ids("<|eot_id|>")
+        ]
+
+        outputs = self.llama_pipeline(
+            messages,
+            max_new_tokens=20,
+            eos_token_id=terminators,
+            do_sample=True,
+            temperature=0.6,
+            top_p=0.9,
+        )
+
+        answer = outputs[0]["generated_text"][-1]['content']
+
+        n_input_tokens = len(self.llama_tokenizer(messages[1]['content'], return_tensors='pt').input_ids[0])
+        n_output_tokens = len(self.llama_tokenizer(answer, return_tensors='pt').input_ids[0])
+
+        return answer, n_input_tokens, n_output_tokens
+    
     def get_diverse_kmeans(self, train_embeddings, region_size, n_regions):
         n_samples = len(train_embeddings)
         gap = region_size * n_regions - n_samples
@@ -436,8 +257,7 @@ class SelectSampler:
             for i in range(region_size):
                 selected_indices = np.argsort(dist_to_centers[:, i])[0]
                 labels[selected_indices] = i
-                dist_to_centers[selected_indices] = 20000 # To prevent duplicated selection (20000 is random high value)
-
+                dist_to_centers[selected_indices] = 20000 
         if (labels == -1).sum() > 0:
             raise ValueError
 
@@ -463,11 +283,18 @@ class SelectSampler:
             
         res = []
         res_bef = []
+        new_res = []
+        
         for i in tqdm(range(len(global_regions))):
             query = self.prompt_local_select(data_train, global_regions[i], local_output)
             
-            answer, input_token, output_token = self.call_api_sllm(query)
-            
+            if self.local_selection_model == 'gpt3.5':
+                answer, input_token, output_token = self.call_api_sllm(query)
+            elif self.local_selection_model == 'mixtral':
+                answer, input_token, output_token = self.call_mx_sllm(query)
+            elif self.local_selection_model == 'llama':
+                answer, input_token, output_token = self.call_llama_sllm(query)
+
             try:
                 answer_aft = list(np.array(ast.literal_eval(answer)) - 1)
                 if len(answer_aft) > local_output:
@@ -475,15 +302,15 @@ class SelectSampler:
             except:
                 answer_aft = np.arange(local_output) + 1  
             
-            res_bef.append(global_regions[i])
-            res.append(global_regions[i][answer_aft])
-            
+            res_bef.append(list(global_regions[i]))
+            res.append(list(global_regions[i][answer_aft]))
+            new_res.append(( list(global_regions[i][answer_aft]), list(global_regions[i]) ))
+
             input_tokens += input_token
             output_tokens += output_token
 
         print("Total input token: {}".format(input_tokens))
         print("Total output token: {}".format(output_tokens))
-        print(answer_aft)
         
         return res, res_bef
     
@@ -527,8 +354,6 @@ class SelectSampler:
         
         res = []
         for i in tqdm(range(len(global_regions))):
-            if i == 1:
-                break
             global_regions[i] = np.array(global_regions[i]).astype(np.int64)
             query = self.prompt_rerank_subset_complex_fewshot_cot(data_train, global_regions[i], local_output, preds[i])
             answer, input_token, output_token = self.call_api(query)
