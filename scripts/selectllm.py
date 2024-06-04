@@ -14,6 +14,9 @@ from sentence_transformers import SentenceTransformer
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from sklearn.metrics import pairwise_distances, pairwise
 from sklearn.cluster import KMeans
+from llama_cpp import Llama
+import ollama
+import re
 
 openai_config = dotenv_values(Path(__file__).parent.parent.joinpath(".env"))
 CLIENT = openai.OpenAI(api_key=openai_config["OPENAI_API_KEY"])
@@ -94,8 +97,8 @@ class SelectSampler:
         self._set_embed()
         if self.local_selection_model == 'mixtral':
             self._load_mixtral_model()
-        elif self.local_selection_model == 'llama':
-            self._load_llama_model()
+        # elif self.local_selection_model == 'llama':
+        #     self._load_llama_gguf_model()
     
     def _set_seed(self, random_state):
         deterministic = True
@@ -136,6 +139,16 @@ class SelectSampler:
             device_map="auto",
         )
         self.llama_tokenizer = self.llama_pipeline.tokenizer
+        print('model loaded\n')
+    
+    def _load_llama_gguf_model(self):
+        print(f'Loading {self.local_selection_model} model')
+        self.llama_model = Llama(
+                model_path="/corpora/InstructTune/cloned_ait/new_repo/models/llama.cpp/models/Meta-Llama-3-70B-Instruct.Q2_K.gguf",
+                n_gpu_layers=-1, # Uncomment to use GPU acceleration
+                seed=self.random_state, # Uncomment to set a specific seed
+                n_ctx=4096, # Uncomment to increase the context window
+                    )
         print('model loaded\n')
 
     def prompt_local_select(self, dataset_train, indices, num):
@@ -228,7 +241,7 @@ class SelectSampler:
 
         outputs = self.llama_pipeline(
             messages,
-            max_new_tokens=20,
+            max_new_tokens=10,
             eos_token_id=terminators,
             do_sample=True,
             temperature=0.6,
@@ -239,6 +252,35 @@ class SelectSampler:
 
         n_input_tokens = len(self.llama_tokenizer(messages[1]['content'], return_tensors='pt').input_ids[0])
         n_output_tokens = len(self.llama_tokenizer(answer, return_tensors='pt').input_ids[0])
+
+        return answer, n_input_tokens, n_output_tokens
+    
+    def call_llama_gguf_sllm(self, query):
+        output = self.llama_model(
+                    query, # Prompt
+                    max_tokens=10, # Generate up to 32 tokens, set to None to generate up to the end of the context window
+                    stop=["Q:", "\n"], # Stop generating just before the model would generate a new question
+                    echo=False # Echo the prompt back in the output
+                ) # Generate a completion, can also call create_completion
+        answer = output['choices'][0]['text']
+        print(answer)
+        n_input_tokens = 0
+        n_output_tokens = 0
+
+        return answer, n_input_tokens, n_output_tokens
+
+    def call_ollama_sllm(self, query):
+        response = ollama.chat(model='llama3:70b-instruct-q8_0', messages=[
+                    {
+                        'role': 'user',
+                        'content': query,
+                    }
+                    ])
+
+        answer = response['message']['content']
+        answer = re.search(r'\[\d+\]', answer).group()
+        n_input_tokens = 0
+        n_output_tokens = 0
 
         return answer, n_input_tokens, n_output_tokens
     
@@ -293,7 +335,7 @@ class SelectSampler:
             elif self.local_selection_model == 'mixtral':
                 answer, input_token, output_token = self.call_mx_sllm(query)
             elif self.local_selection_model == 'llama':
-                answer, input_token, output_token = self.call_llama_sllm(query)
+                answer, input_token, output_token = self.call_ollama_sllm(query)
 
             try:
                 answer_aft = list(np.array(ast.literal_eval(answer)) - 1)
@@ -301,7 +343,14 @@ class SelectSampler:
                     answer_aft = list(np.array(answer_aft)[:local_output])
             except:
                 answer_aft = np.arange(local_output) + 1  
-            
+            # print(answer)
+            # print('')
+            # print(answer_aft)
+            # print('')
+            # print(list(global_regions[i]))
+            # print('')
+            # print(list(global_regions[i][answer_aft]))
+            # print("\n\n\n")
             res_bef.append(list(global_regions[i]))
             res.append(list(global_regions[i][answer_aft]))
             new_res.append(( list(global_regions[i][answer_aft]), list(global_regions[i]) ))
