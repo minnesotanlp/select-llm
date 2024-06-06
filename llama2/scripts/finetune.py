@@ -4,6 +4,7 @@ import time
 import random
 import torch
 import numpy as np
+import wandb
 import pandas as pd
 from pathlib import Path
 from datasets import Dataset
@@ -21,14 +22,15 @@ def set_seed(random_state):
     torch.cuda.manual_seed_all(random_state)
 
 parser = argparse.ArgumentParser(description="Data path for finetuning")
-parser.add_argument('--data_path', type=str, help="Sampled Dataset Path")
-parser.add_argument('--sample_type', type=str, help="Sampling algo used")
-parser.add_argument('--data_set', type=str, help="Dataset Name")
-parser.add_argument('--n_instances', type=str, help="Sampled instances")
-parser.add_argument('--ftype', type=str, help="Type of infoverse single feature (perp/rouge/length)")
-parser.add_argument('--random_state', type=int, default=2023, choices=[2023,2022,2021] ,help="Random state for reproducibility.")
-parser.add_argument('--llama_path', type=str, required=True, help="Directory where finetuned HF llama weights are stored")
-parser.add_argument('--model_path', type=str, required=True, help="Directory where original HF llama weights are stored")
+parser.add_argument('-dp','--data_path', type=str, help="Sampled Dataset Path")
+parser.add_argument('-s','--sample_type', type=str, help="Sampling algo used")
+parser.add_argument('-d','--data_set', type=str, help="Dataset Name")
+parser.add_argument('-n','--n_instances', type=str, help="Sampled instances")
+parser.add_argument('-f','--ftype', type=str, help="Type of infoverse single feature (perp/rouge/length)")
+parser.add_argument('-r','--random_state', type=int, default=2023, choices=[2023,2022,2021] ,help="Random state for reproducibility.")
+parser.add_argument('-lp','--llama_path', type=str, required=True, help="Directory where finetuned HF llama weights are stored")
+parser.add_argument('-mp','--model_path', type=str, required=True, help="Directory where original HF llama weights are stored")
+parser.add_argument('-l','--local_model', type=str, help="Model for SelectLLM. Options: [gpt3.5, mixtral]")
 
 args = parser.parse_args()
 
@@ -40,13 +42,17 @@ n_instances = args.n_instances
 data_set = args.data_set
 ftype = args.ftype
 random_state = args.random_state
+local_selection_model = args.local_model
 OUTPUT_DIR = Path(args.llama_path)
 MODEL_ID = Path(args.model_path)
 set_seed(random_state)
 
-if sample_type in ['infoverse', 'llm_search', 'selectllm']:
+if sample_type == 'infoverse':
     run_name = f'{data_set}_{sample_type}_{ftype}_{n_instances}_rs{random_state}'
     new_output_dir = OUTPUT_DIR.joinpath(data_set, sample_type, ftype, n_instances, str(random_state))
+elif sample_type == 'selectllm':
+    run_name = f'{local_selection_model}_{data_set}_{sample_type}_{ftype}_{n_instances}_rs{random_state}'
+    new_output_dir = OUTPUT_DIR.joinpath(data_set, sample_type, ftype, local_selection_model, n_instances, str(random_state))
 else:
     run_name = f'{data_set}_{sample_type}_{n_instances}_rs{random_state}'
     new_output_dir = OUTPUT_DIR.joinpath(data_set, sample_type, n_instances, str(random_state))
@@ -54,6 +60,8 @@ else:
 if not new_output_dir.exists():
     new_output_dir.mkdir(parents=True)
 
+wandb.init(project="SelectLLM_Finetuning", entity="ritikparkar789", name=run_name)
+print(dataset_path)
 data = pd.read_parquet(dataset_path)
 data = data[["instruction", "input", "output"]]
 
@@ -127,6 +135,8 @@ model = get_peft_model(model, peft_config)
 from utils.llama_patch import upcast_layer_for_flash_attention
 model = upcast_layer_for_flash_attention(model, torch.bfloat16)
 
+wandb.watch(model)
+
 args = TrainingArguments(
     output_dir=new_output_dir,
     num_train_epochs=20,
@@ -137,6 +147,7 @@ args = TrainingArguments(
     optim='paged_adamw_32bit',
     logging_steps=5,
     save_strategy='epoch',
+    report_to = 'wandb',
     learning_rate=2e-4,
     bf16=True,
     tf32=True,
@@ -169,6 +180,7 @@ trainer.train() # there will not be a progress bar since tqdm is disabled
 # save model
 trainer.save_model()
 
+wandb.finish()
 end_Time = time.time()
 
 print(f"Total time taking for finetuning:{end_Time-start_time} with flash attn enabled:{use_flash_attention} \n")

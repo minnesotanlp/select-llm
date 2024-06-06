@@ -126,7 +126,7 @@ class SelectSampler:
         print(f'Loading {self.local_selection_model} model')
         self.mixtral_model_id = "mistralai/Mixtral-8x7B-Instruct-v0.1"
         self.mixtral_tokenizer = AutoTokenizer.from_pretrained(self.mixtral_model_id)
-        self.mixtral_model = AutoModelForCausalLM.from_pretrained(self.mixtral_model_id, load_in_4bit=True, device_map="auto")
+        self.mixtral_model = AutoModelForCausalLM.from_pretrained(self.mixtral_model_id, load_in_8bit=True, device_map="auto")
         print('model loaded\n')
     
     def _load_llama_model(self):
@@ -224,6 +224,7 @@ class SelectSampler:
         outputs = self.mixtral_model.generate(input_ids, max_new_tokens=40)
         answer = self.mixtral_tokenizer.decode(outputs[0], skip_special_tokens=True)
         answer = answer[len(input_text):].strip()
+        answer = re.search(r'\[\d+\]', answer).group()
         n_input_tokens = input_ids.shape[1]
         n_output_tokens = outputs.shape[1]
         return answer, n_input_tokens, n_output_tokens
@@ -274,8 +275,11 @@ class SelectSampler:
                     {
                         'role': 'user',
                         'content': query,
-                    }
-                    ])
+                    }]
+                    , options={
+    'num_predict': 128,
+    'seed': self.random_state
+  })
 
         answer = response['message']['content']
         answer = re.search(r'\[\d+\]', answer).group()
@@ -343,14 +347,6 @@ class SelectSampler:
                     answer_aft = list(np.array(answer_aft)[:local_output])
             except:
                 answer_aft = np.arange(local_output) + 1  
-            # print(answer)
-            # print('')
-            # print(answer_aft)
-            # print('')
-            # print(list(global_regions[i]))
-            # print('')
-            # print(list(global_regions[i][answer_aft]))
-            # print("\n\n\n")
             res_bef.append(list(global_regions[i]))
             res.append(list(global_regions[i][answer_aft]))
             new_res.append(( list(global_regions[i][answer_aft]), list(global_regions[i]) ))

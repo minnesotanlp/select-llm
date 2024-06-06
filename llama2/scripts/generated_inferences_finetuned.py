@@ -28,13 +28,14 @@ def str2bool(v):
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
 parser = argparse.ArgumentParser(description="Run Inference using the finetuned model")
-parser.add_argument('--sample_type', type=str, required=True, help='pass the sampling type')
-parser.add_argument('--data_set', type=str, required=True, help='pass the data type')
-parser.add_argument('--n_instances', type=str, required=True, help='pass the instances sampled')
+parser.add_argument('-s','--sample_type', type=str, help="Sampling algo used")
+parser.add_argument('-d','--data_set', type=str, help="Dataset Name")
+parser.add_argument('-n','--n_instances', type=str, help="Sampled instances")
+parser.add_argument('-f','--ftype', type=str, help="Type of infoverse single feature (perp/rouge/length)")
+parser.add_argument('-r','--random_state', type=int, default=2023, choices=[2023,2022,2021] ,help="Random state for reproducibility.")
 parser.add_argument('--det', type=str2bool, required=True, help='Deterministic Inferences or not')
-parser.add_argument('--ftype', type=str, help='Type of infoverse single feature (perp/rouge/length)')
-parser.add_argument('--random_state', type=int, default=2023, choices=[2023,2022,2021] ,help='Random state for reproducibility.')
-parser.add_argument('--llama_path', type=str, required=True, help='Directory where finetuned HF llama weights are stored')
+parser.add_argument('-lp','--llama_path', type=str, required=True, help="Directory where finetuned HF llama weights are stored")
+parser.add_argument('-l','--local_model', type=str, help="Model for SelectLLM. Options: [gpt3.5, mixtral]")
 
 args = parser.parse_args()
 sample_type = args.sample_type
@@ -43,16 +44,19 @@ det = args.det
 data_set = args.data_set
 ftype = args.ftype
 random_state = args.random_state
+local_selection_model = args.local_model
 set_seed(random_state)
 
 init_time = time.time()
 
-TEST_DIR = os.path.join('./datasets/test/', data_set)
-DATA_PATH = os.path.join('./datasets/data/', data_set) 
+TEST_DIR = os.path.join('../datasets/test/', data_set)
+DATA_PATH = os.path.join('../datasets/data/', data_set) 
 TEST_DIR = Path(TEST_DIR)
 LLAMA_DIR = args.llama_path
-if sample_type=='infoverse' or sample_type=='llm_search' or sample_type == 'selectllm':
+if sample_type=='infoverse':
     MODEL_DIR = os.path.join(LLAMA_DIR, data_set, sample_type, ftype, n_instances, str(random_state))
+elif sample_type == 'selectllm':
+    MODEL_DIR = os.path.join(LLAMA_DIR, data_set, sample_type, ftype, local_selection_model, n_instances, str(random_state))
 else:
     MODEL_DIR = os.path.join(LLAMA_DIR, data_set, sample_type, n_instances, str(random_state))
 
@@ -69,8 +73,10 @@ else:
 formattype = "_formatted" 
 det_str = "_det" if det else ""
 
-if sample_type=='infoverse' or sample_type == 'selectllm':
+if sample_type=='infoverse':
     SAVE_TEST_FILE = f'{sample_type}_{ftype}_{n_instances}{formattype}{det_str}_rs_{random_state}.json' 
+elif sample_type == 'selectllm':
+    SAVE_TEST_FILE = f'{sample_type}_{ftype}_{local_selection_model}_{n_instances}{formattype}{det_str}_rs_{random_state}.json' 
 else:
     SAVE_TEST_FILE = f'{sample_type}_{n_instances}{formattype}{det_str}_rs_{random_state}.json'
 TEST_PATH = os.path.join(TEST_DIR, SAVE_TEST_FILE)
@@ -95,7 +101,6 @@ def format_instruction(sample):
 # Load the JSON file containing the prompts
 prompts_path = os.path.join(DATA_PATH, 'prompts.json')
 prompts_format_path = os.path.join(DATA_PATH, 'prompt_format.json')
-sampled_path = os.path.join(DATA_PATH, 'test_data.json')
 
 prompts = []
 
@@ -103,6 +108,7 @@ if os.path.exists(prompts_format_path):
     with open(prompts_format_path, 'r') as f:
         prompts = json.load(f)
 else:
+    sampled_path = os.path.join(DATA_PATH, 'test_data.json')
     with open(sampled_path, "r") as f:
         data_df = pd.read_csv(f)
         data_df[['instruction', 'input', 'output']] = data_df[['instruction', 'input', 'output']].fillna('')
