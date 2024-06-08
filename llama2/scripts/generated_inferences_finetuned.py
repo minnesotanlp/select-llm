@@ -167,7 +167,6 @@ model_infers = []
 zero_time = time.time()
 
 for i in range(len(prompts)):
-    break
     st = time.time()
     input_tokens = tokenizer(prompts[i], return_tensors="pt",  truncation=True, return_attention_mask=True)
     if torch.cuda.is_available():
@@ -210,8 +209,8 @@ for i in range(len(prompts)):
 
 
 TEST_DIR.mkdir(parents=True, exist_ok=True)
-# with open(TEST_PATH, "w") as f:
-#     json.dump(model_infers, f)
+with open(TEST_PATH, "w") as f:
+    json.dump(model_infers, f)
 
 fin_time = time.time()
 final_time = fin_time - init_time
