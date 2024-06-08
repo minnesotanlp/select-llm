@@ -52,7 +52,7 @@ if sample_type == 'infoverse':
     new_output_dir = OUTPUT_DIR.joinpath(data_set, sample_type, ftype, n_instances, str(random_state))
 elif sample_type == 'selectllm':
     run_name = f'{local_selection_model}_{data_set}_{sample_type}_{ftype}_{n_instances}_rs{random_state}'
-    new_output_dir = OUTPUT_DIR.joinpath(data_set, sample_type, ftype, local_selection_model, n_instances, str(random_state))
+    new_output_dir = OUTPUT_DIR.joinpath(data_set, sample_type, ftype, local_selection_model, n_instances, str(random_state)) 
 else:
     run_name = f'{data_set}_{sample_type}_{n_instances}_rs{random_state}'
     new_output_dir = OUTPUT_DIR.joinpath(data_set, sample_type, n_instances, str(random_state))
@@ -71,7 +71,7 @@ try:
 except:
     pass
 
-def format_instruction(sample):
+def format_instruction(sample): 
 	return f"""### Instruction:
 {sample['instruction']}
 

@@ -56,7 +56,7 @@ LLAMA_DIR = args.llama_path
 if sample_type=='infoverse':
     MODEL_DIR = os.path.join(LLAMA_DIR, data_set, sample_type, ftype, n_instances, str(random_state))
 elif sample_type == 'selectllm':
-    MODEL_DIR = os.path.join(LLAMA_DIR, data_set, sample_type, ftype, local_selection_model, n_instances, str(random_state))
+    MODEL_DIR = os.path.join(LLAMA_DIR, data_set, sample_type, ftype, local_selection_model, n_instances, str(random_state)) 
 else:
     MODEL_DIR = os.path.join(LLAMA_DIR, data_set, sample_type, n_instances, str(random_state))
 
@@ -165,7 +165,9 @@ for param in model.parameters():
 
 model_infers = []
 zero_time = time.time()
+
 for i in range(len(prompts)):
+    break
     st = time.time()
     input_tokens = tokenizer(prompts[i], return_tensors="pt",  truncation=True, return_attention_mask=True)
     if torch.cuda.is_available():
@@ -208,8 +210,8 @@ for i in range(len(prompts)):
 
 
 TEST_DIR.mkdir(parents=True, exist_ok=True)
-with open(TEST_PATH, "w") as f:
-    json.dump(model_infers, f)
+# with open(TEST_PATH, "w") as f:
+#     json.dump(model_infers, f)
 
 fin_time = time.time()
 final_time = fin_time - init_time
