@@ -270,19 +270,34 @@ class SelectSampler:
 
         return answer, n_input_tokens, n_output_tokens
 
-    def call_ollama_sllm(self, query):
+    def call_ollama_sllm(self, query, num):
         response = ollama.chat(model='llama3:70b-instruct-q8_0', messages=[
                     {
                         'role': 'user',
                         'content': query,
                     }]
                     , options={
-    'num_predict': 128,
-    'seed': self.random_state
-  })
+                        'num_predict': 128,
+                        'seed': self.random_state
+                    })
+        
+        waiting_time = 0.5
+        answer = None
+        while answer is None:
+            try:
+                answer = response['message']['content']
+            except:
+                time.sleep(waiting_time)
+                if waiting_time < 5:
+                    waiting_time += 0.5
+                else:
+                    break
 
-        answer = response['message']['content']
-        answer = re.search(r'\[\d+\]', answer).group()
+        preans = [int(num) for num in re.search(r'\[(\d+(?:\s*,\s*\d+)*)\]', answer).group(1).split(',')]
+        if num == 1:
+            answer = re.search(r'\[\d+\]', answer).group()
+        else:
+            answer =  [int(num) for num in re.search(r'\[(\d+(?:\s*,\s*\d+)*)\]', answer).group(1).split(',')]
         n_input_tokens = 0
         n_output_tokens = 0
 
@@ -339,7 +354,7 @@ class SelectSampler:
             elif self.local_selection_model == 'mixtral':
                 answer, input_token, output_token = self.call_mx_sllm(query)
             elif self.local_selection_model == 'llama':
-                answer, input_token, output_token = self.call_ollama_sllm(query)
+                answer, input_token, output_token = self.call_ollama_sllm(query, local_output)
 
             try:
                 answer_aft = list(np.array(ast.literal_eval(answer)) - 1)
