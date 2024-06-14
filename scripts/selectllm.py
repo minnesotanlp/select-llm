@@ -5,6 +5,7 @@ import random
 import argparse
 import torch
 import openai
+import anthropic
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -18,8 +19,9 @@ from llama_cpp import Llama
 import ollama
 import re
 
-openai_config = dotenv_values(Path(__file__).parent.parent.joinpath(".env"))
-CLIENT = openai.OpenAI(api_key=openai_config["OPENAI_API_KEY"])
+api_config = dotenv_values(Path(__file__).parent.parent.joinpath('.env'))
+CLIENT = openai.OpenAI(api_key=api_config['OPENAI_API_KEY'])
+CLAUDE_CLIENT = anthropic.Anthropic(api_key=api_config['CLAUDE_API_KEY'])
 
 class Coreset_Greedy:
     def __init__(self, all_pts, random_state):
@@ -185,7 +187,6 @@ class SelectSampler:
                         {"role": "system", "content": query},
                 ]
                 
-                    # ChatGPT API 호출하기
                 response = CLIENT.chat.completions.create(
                     model=model,
                     messages=messages,
@@ -211,6 +212,82 @@ class SelectSampler:
             n_input_tokens = 0
             n_output_tokens = 0
             
+        return answer, n_input_tokens, n_output_tokens
+    
+    def call_gpt4o_sllm(self, query):
+        model = 'gpt-4o-2024-05-13'
+        waiting_time = 0.5
+        
+        response = None
+        while response is None:
+            try:
+                messages = [
+                        {'role': 'system', 'content': query},
+                ]
+                
+                response = CLIENT.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=0.0,
+                    max_tokens=256
+                )
+            except:
+                time.sleep(waiting_time)
+                if waiting_time < 5:
+                    waiting_time += 0.5
+                else:
+                    break
+        if response is not None:
+            try:
+                answer = response.choices[0].message.content
+            except:
+                answer = 'N/A'
+            usage_data = dict(response.usage) if response.usage else {}
+            n_input_tokens = usage_data.get('prompt_tokens', 0)
+            n_output_tokens = usage_data.get('completion_tokens', 0)
+        else:
+            answer = 'N/A'
+            n_input_tokens = 0
+            n_output_tokens = 0
+            
+        return answer, n_input_tokens, n_output_tokens
+    
+    def call_claude_sllm(self, query):
+        model = 'claude-3-haiku-20240307'
+        waiting_time = 0.5
+        
+        response = None
+        while response is None:
+            try:
+                messages = [
+                    {'role': 'user', 'content': query},
+                ]
+                
+                response = CLAUDE_CLIENT.messages.create(
+                    model=model,
+                    messages=messages,
+                    temperature=0.0,
+                    max_tokens=256
+                )
+            except:
+                time.sleep(waiting_time)
+                if waiting_time < 5:
+                    waiting_time += 0.5
+                else:
+                    break
+        if response is not None:
+            try:
+                answer = response.content[0].text
+            except:
+                answer = 'N/A'
+            usage_data = dict(response.usage) if response.usage else {}
+            n_input_tokens = usage_data.get('input_tokens', 0)
+            n_output_tokens = usage_data.get('output_tokens', 0)
+        else:
+            answer = 'N/A'
+            n_input_tokens = 0
+            n_output_tokens = 0
+        
         return answer, n_input_tokens, n_output_tokens
     
     def call_mx_sllm(self, query):
@@ -336,10 +413,14 @@ class SelectSampler:
             
             if self.local_selection_model == 'gpt3.5':
                 answer, input_token, output_token = self.call_api_sllm(query)
+            elif self.local_selection_model == 'gpt4o':
+                answer, input_token, output_token = self.call_api_sllm(query)
             elif self.local_selection_model == 'mixtral':
                 answer, input_token, output_token = self.call_mx_sllm(query)
             elif self.local_selection_model == 'llama':
                 answer, input_token, output_token = self.call_ollama_sllm(query)
+            elif self.local_selection_model == 'haiku':
+                answer, input_token, output_token = self.call_claude_sllm(query)
 
             try:
                 answer_aft = list(np.array(ast.literal_eval(answer)) - 1)

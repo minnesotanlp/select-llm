@@ -511,7 +511,7 @@ def get_args():
     parser.add_argument('-d','--data_set', default='all', help="Dataset to use for sampling. Options:[cleaned_alpaca, dolly]")
     parser.add_argument('-r','--random_state', type=int, default=2023, help="Random state for reproducibility.")
     parser.add_argument('-f','--ftype', type=str, help="Length:[long, short], Perplexity:[low, high, medium] SelectLLM:[similar, diverse, random]")
-    parser.add_argument('-l','--local_model', type=str, help="Model for SelectLLM. Options: [gpt3.5, mixtral]")
+    parser.add_argument('-l','--local_model', type=str, help="Model for SelectLLM. Options: [gpt3.5, mixtral, haiku, gpt4o]")
     
     return parser.parse_args()
 
