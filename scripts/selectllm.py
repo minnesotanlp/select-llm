@@ -271,33 +271,40 @@ class SelectSampler:
         return answer, n_input_tokens, n_output_tokens
 
     def call_ollama_sllm(self, query, num):
-        response = ollama.chat(model='llama3:70b-instruct-q8_0', messages=[
+        while True:
+            try:
+                response = ollama.chat(model='llama3:70b-instruct-q8_0', messages=[
                     {
                         'role': 'user',
                         'content': query,
                     }]
                     , options={
-                        'num_predict': 128,
+                        'num_predict': 20,
                         'seed': self.random_state
                     })
-        
-        waiting_time = 0.5
-        answer = None
-        while answer is None:
-            try:
-                answer = response['message']['content']
-            except:
-                time.sleep(waiting_time)
-                if waiting_time < 5:
-                    waiting_time += 0.5
-                else:
+
+                waiting_time = 0.5
+                answer = None
+                while answer is None:
+                    try:
+                        answer = response['message']['content']
+                    except:
+                        time.sleep(waiting_time)
+                        if waiting_time < 5:
+                            waiting_time += 0.5
+                        else:
+                            break
+
+                if answer is not None:
+                    if num == 1:
+                        answer = re.search(r'\[\d+\]', answer).group()
+                    else:
+                        answer = [int(num) for num in re.search(r'\[(\d+(?:\s*,\s*\d+)*)\]', answer).group(1).split(',')]
                     break
 
-        preans = [int(num) for num in re.search(r'\[(\d+(?:\s*,\s*\d+)*)\]', answer).group(1).split(',')]
-        if num == 1:
-            answer = re.search(r'\[\d+\]', answer).group()
-        else:
-            answer =  [int(num) for num in re.search(r'\[(\d+(?:\s*,\s*\d+)*)\]', answer).group(1).split(',')]
+            except Exception as e:
+                print(f'Error occurred: {e}. Retrying...')
+
         n_input_tokens = 0
         n_output_tokens = 0
 
