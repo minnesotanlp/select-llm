@@ -24,14 +24,15 @@ def set_seed(random_state):
     torch.cuda.manual_seed_all(random_state)
 
 parser = argparse.ArgumentParser(description="Data path for finetuning")
-parser.add_argument('--data_path', type=str, help="Sampled Dataset Path")
-parser.add_argument('--sample_type', type=str, help="Sampling algo used")
-parser.add_argument('--data_set', type=str, help="Dataset Name")
-parser.add_argument('--n_instances', type=str, help="Sampled instances")
-parser.add_argument('--ftype', type=str, help="Type of infoverse single feature (perp/rouge/length)")
-parser.add_argument('--random_state', type=int, default=2023, choices=[2023,2022,2021] ,help="Random state for reproducibility.")
-parser.add_argument('--mistral_path', type=str, required=True, help="Directory where finetuned HF mistral weights are stored")
-# parser.add_argument('--model_path', type=str, required=True, help="Directory where original HF llama weights are stored")
+parser.add_argument('-dp','--data_path', type=str, help="Sampled Dataset Path")
+parser.add_argument('-s','--sample_type', type=str, help="Sampling algo used")
+parser.add_argument('-d','--data_set', type=str, help="Dataset Name")
+parser.add_argument('-n','--n_instances', type=str, help="Sampled instances")
+parser.add_argument('-f','--ftype', type=str, help="Type of infoverse single feature (perp/rouge/length)")
+parser.add_argument('-r','--random_state', type=int, default=2023, choices=[2023,2022,2021] ,help="Random state for reproducibility.")
+parser.add_argument('-mp','--mistral_path', type=str, required=True, help="Directory where finetuned HF mistral weights are stored")
+parser.add_argument('-l','--local_model', type=str, help="Model for SelectLLM. Options: [gpt3.5, mixtral]")
+parser.add_argument('-fm','--finetune_model', type=str, help="Model to finetune: [llama, mistral]")
 
 args = parser.parse_args()
 
@@ -43,17 +44,21 @@ n_instances = args.n_instances
 data_set = args.data_set
 ftype = args.ftype
 random_state = args.random_state
+local_selection_model = args.local_model
+finetune_model = args.finetune_model
 OUTPUT_DIR = Path(args.mistral_path)
-# MODEL_ID = "mistralai/Mistral-7B-v0.1"
-MODEL_ID = "unsloth/mistral-7b-bnb-4bit"
+MODEL_ID = "unsloth/mistral-7b-bnb-4bit" if finetune_model=='mistral' else "unsloth/llama-2-7b-bnb-4bit"
 set_seed(random_state)
 
-if sample_type in ['infoverse', 'llm_search', 'selectllm']:
-    run_name = f'mistral_us_{data_set}_{sample_type}_{ftype}_{n_instances}_rs{random_state}'
-    new_output_dir = OUTPUT_DIR.joinpath(data_set, sample_type, ftype, n_instances, str(random_state))
+if sample_type == 'infoverse':
+    run_name = f'{finetune_model}_{data_set}_{sample_type}_{ftype}_{n_instances}_rs{random_state}_ES=0'
+    new_output_dir = OUTPUT_DIR.joinpath(data_set, finetune_model, sample_type, ftype, n_instances, str(random_state))
+elif sample_type == 'selectllm':
+    run_name = f'{finetune_model}_{local_selection_model}_{data_set}_{sample_type}_{ftype}_{n_instances}_rs{random_state}'
+    new_output_dir = OUTPUT_DIR.joinpath(data_set, finetune_model, sample_type, ftype, local_selection_model, n_instances, str(random_state)) 
 else:
-    run_name = f'mistral_us_{data_set}_{sample_type}_{n_instances}_rs{random_state}'
-    new_output_dir = OUTPUT_DIR.joinpath(data_set, sample_type, n_instances, str(random_state))
+    run_name = f'{finetune_model}_{data_set}_{sample_type}_{n_instances}_rs{random_state}_ES=0'
+    new_output_dir = OUTPUT_DIR.joinpath(data_set, finetune_model, sample_type, n_instances, str(random_state))
 
 if not new_output_dir.exists():
     new_output_dir.mkdir(parents=True)
@@ -139,13 +144,11 @@ val_data = splits['test']
 #Formatting each instruction as a batch
 train_data = train_data.map(format_instructions_batch, batched = True, fn_kwargs={'eostoken': EOS_TOKEN})
 val_data = val_data.map(format_instructions_batch, batched = True, fn_kwargs={'eostoken': EOS_TOKEN})
-# print(train_data[0]['text']) 
 #Formatting each instruction one by one
 # train_data = train_data.map(lambda x: {'text': format_instruction(x, EOS_TOKEN)})
 # val_data = val_data.map(lambda x: {'text': format_instruction(x, EOS_TOKEN)})
 
 wandb.watch(model)
-
 
 trainer = SFTTrainer(
     model = model,
@@ -158,7 +161,7 @@ trainer = SFTTrainer(
     packing = False, # Can make training 5x faster for short sequences.
     callbacks=[EarlyStoppingCallback(early_stopping_patience=3, early_stopping_threshold=0.01)],
     args = TrainingArguments(
-        per_device_train_batch_size = 4,
+        per_device_train_batch_size = 10,
         gradient_accumulation_steps = 4,
         warmup_steps = 5,
         max_steps = 600,
