@@ -14,8 +14,6 @@ from unsloth import FastLanguageModel
 from trl import SFTTrainer
 from transformers import TrainingArguments
 
-
-
 def set_seed(random_state):
     deterministic = True
     random.seed(random_state)
@@ -48,16 +46,17 @@ local_selection_model = args.local_model
 finetune_model = args.finetune_model
 OUTPUT_DIR = Path(args.mistral_path)
 MODEL_ID = "unsloth/mistral-7b-bnb-4bit" if finetune_model=='mistral' else "unsloth/llama-2-7b-bnb-4bit"
+MAX_STEPS = {1000: 125, 2000: 225, 3000: 325}.get(int(n_instances), None)
 set_seed(random_state)
 
 if sample_type == 'infoverse':
-    run_name = f'{finetune_model}_{data_set}_{sample_type}_{ftype}_{n_instances}_rs{random_state}_ES=0'
+    run_name = f'{finetune_model}_{data_set}_{sample_type}_{ftype}_{int(n_instances)//1000}k_{random_state}'
     new_output_dir = OUTPUT_DIR.joinpath(data_set, finetune_model, sample_type, ftype, n_instances, str(random_state))
 elif sample_type == 'selectllm':
-    run_name = f'{finetune_model}_{local_selection_model}_{data_set}_{sample_type}_{ftype}_{n_instances}_rs{random_state}'
+    run_name = f'{finetune_model}_{data_set}_{sample_type}_{ftype}_{local_selection_model}_{int(n_instances)//1000}k_{random_state}'
     new_output_dir = OUTPUT_DIR.joinpath(data_set, finetune_model, sample_type, ftype, local_selection_model, n_instances, str(random_state)) 
 else:
-    run_name = f'{finetune_model}_{data_set}_{sample_type}_{n_instances}_rs{random_state}_ES=0'
+    run_name = f'{finetune_model}_{data_set}_{sample_type}_{int(n_instances)//1000}k_{random_state}'
     new_output_dir = OUTPUT_DIR.joinpath(data_set, finetune_model, sample_type, n_instances, str(random_state))
 
 if not new_output_dir.exists():
@@ -95,18 +94,13 @@ def format_instructions_batch(examples, eostoken):
     
     texts = []
     for instruction, input, output in zip(instructions, inputs, outputs):
-        text = f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
-
-### Instruction:
-
+        text = f"""### Instruction:
 {instruction}
 
 ### Input:
-
 {input}
 
 ### Response:
-
 {output}
 
 """ + eostoken
@@ -161,10 +155,10 @@ trainer = SFTTrainer(
     packing = False, # Can make training 5x faster for short sequences.
     callbacks=[EarlyStoppingCallback(early_stopping_patience=3, early_stopping_threshold=0.01)],
     args = TrainingArguments(
-        per_device_train_batch_size = 10,
+        per_device_train_batch_size = 8,
         gradient_accumulation_steps = 4,
         warmup_steps = 5,
-        max_steps = 600,
+        max_steps = MAX_STEPS,
         learning_rate = 2e-4,
         fp16 = not torch.cuda.is_bf16_supported(),
         bf16 = torch.cuda.is_bf16_supported(),
@@ -176,10 +170,10 @@ trainer = SFTTrainer(
         seed = random_state,
         output_dir = new_output_dir,
         evaluation_strategy = 'steps',
-        load_best_model_at_end = True
+        load_best_model_at_end = True,
+        save_total_limit=2,
     ),
 )
-
 
 # train
 trainer.train() # there will not be a progress bar since tqdm is disabled

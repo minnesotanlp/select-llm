@@ -146,11 +146,7 @@ model, tokenizer = FastLanguageModel.from_pretrained(
     )
 FastLanguageModel.for_inference(model)
 
-
 max_model_token_limit = model.config.max_position_embeddings
-# max_model_token_limit = 512
-
-batch_size = 8
 outputs = []
 
 for param in model.parameters():
@@ -169,11 +165,11 @@ def format_prompt(prompt):
 prepend_text = "Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.\n\n"
 modified_prompts = [prepend_text + format_prompt(prompt) for prompt in prompts]
 
-for i in range(len(modified_prompts)):
+for i in range(len(prompts)):
     st = time.time()
     inputs = tokenizer(
             [
-                modified_prompts[i]
+                prompts[i]
             ], return_tensors = "pt").to("cuda")
 
     if det==True:
@@ -198,7 +194,7 @@ for i in range(len(modified_prompts)):
                 max_new_tokens=NEWTOKS #Camel dataset ground truth has an average of 530 tokens and dolly has 339
             )
 
-    decoded_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=False)[0][len(modified_prompts[i]):]
+    decoded_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=False)[0][len(prompts[i]):]
     model_infers.append(decoded_outputs)
        
     et = time.time()
