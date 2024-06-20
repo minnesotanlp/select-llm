@@ -76,25 +76,27 @@ if __name__=='__main__':
     parser.add_argument('-f','--ftype', help="specific sampling type")
     parser.add_argument('-n','--n_instances', help="no. of instances")
     parser.add_argument('-l','--local_model', type=str, help="Model for SelectLLM. Options: [gpt3.5, mixtral]")
+    parser.add_argument('-fm','--finetune_model', type=str, help="Model to finetune: [llama, mistral]")
     args = parser.parse_args()
 
     data_set = args.data_set
     sample_type = args.sample_type
     n_instances = args.n_instances
     local_selection_model = args.local_model
+    finetune_model = args.finetune_model
     preds_dir = Path(__file__).parent.parent.joinpath('datasets', 'test', data_set)
     if sample_type == 'infoverse':
-        preds_rs1 = preds_dir.joinpath(f'{sample_type}_{args.ftype}_{n_instances}_formatted_det_rs_2021.json')
-        preds_rs2 = preds_dir.joinpath(f'{sample_type}_{args.ftype}_{n_instances}_formatted_det_rs_2022.json')
-        preds_rs3 = preds_dir.joinpath(f'{sample_type}_{args.ftype}_{n_instances}_formatted_det_rs_2023.json')
+        preds_rs1 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{args.ftype}_{n_instances}_formatted_det_rs_2021.json')
+        preds_rs2 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{args.ftype}_{n_instances}_formatted_det_rs_2022.json')
+        preds_rs3 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{args.ftype}_{n_instances}_formatted_det_rs_2023.json')
     elif sample_type == 'selectllm':
-        preds_rs1 = preds_dir.joinpath(f'{sample_type}_{args.ftype}_{local_selection_model}_{n_instances}_formatted_det_rs_2021.json')
-        preds_rs2 = preds_dir.joinpath(f'{sample_type}_{args.ftype}_{local_selection_model}_{n_instances}_formatted_det_rs_2022.json')
-        preds_rs3 = preds_dir.joinpath(f'{sample_type}_{args.ftype}_{local_selection_model}_{n_instances}_formatted_det_rs_2023.json')
+        preds_rs1 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{args.ftype}_{local_selection_model}_{n_instances}_formatted_det_rs_2021.json')
+        preds_rs2 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{args.ftype}_{local_selection_model}_{n_instances}_formatted_det_rs_2022.json')
+        preds_rs3 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{args.ftype}_{local_selection_model}_{n_instances}_formatted_det_rs_2023.json')
     else:
-        preds_rs1 = preds_dir.joinpath(f'{sample_type}_{n_instances}_formatted_det_rs_2021.json')
-        preds_rs2 = preds_dir.joinpath(f'{sample_type}_{n_instances}_formatted_det_rs_2022.json')
-        preds_rs3 = preds_dir.joinpath(f'{sample_type}_{n_instances}_formatted_det_rs_2023.json')
+        preds_rs1 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{n_instances}_formatted_det_rs_2021.json')
+        preds_rs2 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{n_instances}_formatted_det_rs_2022.json')
+        preds_rs3 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{n_instances}_formatted_det_rs_2023.json')
 
     gts_path = Path(__file__).parent.parent.joinpath('datasets', 'data', data_set, 'test_gts.json')
     with open(preds_rs1, 'r') as f:
@@ -112,18 +114,18 @@ if __name__=='__main__':
     
     _, _, camel_rouge_l_mean1 = evaluation.rouge(preds1, gts)
     _, camel_cossims_mean1 = evaluation.cossims(gts, preds1)
-    camel_perp1 = evaluation.perplexity(preds1)
-    print(f'For {filename}_{data_set}:\n\n rouge1:{camel_rouge_l_mean1} cos1:{camel_cossims_mean1} perp1:{camel_perp1} \n')
+    # camel_perp1 = evaluation.perplexity(preds1)
+    print(f'For {filename}_{data_set}:\n\n rouge1:{camel_rouge_l_mean1} cos1:{camel_cossims_mean1}\n')
 
     _, _, camel_rouge_l_mean2 = evaluation.rouge(preds2, gts)
     _, camel_cossims_mean2 = evaluation.cossims(gts, preds2)
-    camel_perp2 = evaluation.perplexity(preds2)
+    # camel_perp2 = evaluation.perplexity(preds2)
 
     _, _, camel_rouge_l_mean3 = evaluation.rouge(preds3, gts)
     _, camel_cossims_mean3 = evaluation.cossims(gts, preds3)
-    camel_perp3 = evaluation.perplexity(preds3)
+    # camel_perp3 = evaluation.perplexity(preds3)
 
     camel_rouge_l_mean = (camel_rouge_l_mean1 + camel_rouge_l_mean2 + camel_rouge_l_mean3)/3.0
     camel_cossims_mean = (camel_cossims_mean1 + camel_cossims_mean2 + camel_cossims_mean3)/3.0
-    camel_perp         = (camel_perp1 + camel_perp2 + camel_perp3)/3.0
-    print(f'For {filename}_{data_set}:\n\n rouge1:{camel_rouge_l_mean1} cos1:{camel_cossims_mean1} perp1:{camel_perp1}\n rouge3:{camel_rouge_l_mean2} cos3:{camel_cossims_mean2} perp3:{camel_perp2}\n\n rouge mean:{camel_rouge_l_mean} cossims mean:{camel_cossims_mean} perp:{camel_perp} \n\n')
+    # camel_perp         = (camel_perp1 + camel_perp2 + camel_perp3)/3.0
+    print(f'For {filename}_{data_set}:\n\n rouge1:{camel_rouge_l_mean1} cos1:{camel_cossims_mean1} \n rouge2:{camel_rouge_l_mean2} cos2:{camel_cossims_mean2} \n\n rouge mean:{camel_rouge_l_mean} cossims mean:{camel_cossims_mean}\n\n')

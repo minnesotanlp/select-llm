@@ -70,7 +70,6 @@ elif data_set == 'cleaned_alpaca':
 else:
     NEWTOKS = 200
 
-
 formattype = "_formatted" 
 det_str = "_det" if det else ""
 
@@ -171,6 +170,15 @@ for i in range(len(prompts)):
             [
                 prompts[i]
             ], return_tensors = "pt").to("cuda")
+
+    input_length = inputs['input_ids'].shape[1]
+    max_input_length = max_model_token_limit - NEWTOKS
+
+    # If input length exceeds the allowed length, truncate it
+    if input_length > max_input_length:
+        print(f"Truncating input prompt {i} to fit within the max token limit")
+        inputs['input_ids'] = inputs['input_ids'][:, :max_input_length]
+        inputs['attention_mask'] = inputs['attention_mask'][:, :max_input_length]
 
     if det==True:
         with torch.no_grad():
