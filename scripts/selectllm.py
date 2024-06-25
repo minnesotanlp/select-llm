@@ -14,8 +14,8 @@ from sentence_transformers import SentenceTransformer
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from sklearn.metrics import pairwise_distances, pairwise
 from sklearn.cluster import KMeans
-from llama_cpp import Llama
-import ollama
+# from llama_cpp import Llama
+# import ollama
 import re
 
 openai_config = dotenv_values(Path(__file__).parent.parent.joinpath(".env"))
@@ -175,7 +175,8 @@ class SelectSampler:
         return text
     
     def call_api_sllm(self, query):
-        model = "gpt-3.5-turbo-1106"
+        # model = "gpt-3.5-turbo-1106"
+        model = "gpt-3.5-turbo-0125"
         waiting_time = 0.5
         
         response = None
@@ -264,7 +265,6 @@ class SelectSampler:
                     echo=False # Echo the prompt back in the output
                 ) # Generate a completion, can also call create_completion
         answer = output['choices'][0]['text']
-        print(answer)
         n_input_tokens = 0
         n_output_tokens = 0
 

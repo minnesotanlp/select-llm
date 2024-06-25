@@ -45,8 +45,9 @@ random_state = args.random_state
 local_selection_model = args.local_model
 finetune_model = args.finetune_model
 OUTPUT_DIR = Path(args.mistral_path)
-MODEL_ID = "unsloth/mistral-7b-bnb-4bit" if finetune_model=='mistral' else "unsloth/llama-2-7b-bnb-4bit"
-MAX_STEPS = {1000: 125, 2000: 225, 3000: 325}.get(int(n_instances), None)
+MODEL_ID = "unsloth/mistral-7b-v0.3" if finetune_model=='mistral' else "unsloth/llama-2-7b-bnb-4bit"
+MAX_STEPS = {1000: 125, 2000: 150, 3000: 200, 9000:1000}.get(int(n_instances), None)
+EARLY_STOPPING_PATIENCE = {1000: 5, 2000: 5, 3000: 5, 9000:12}.get(int(n_instances), None)
 set_seed(random_state)
 
 if sample_type == 'infoverse':
@@ -153,7 +154,7 @@ trainer = SFTTrainer(
     max_seq_length = max_seq_length,
     dataset_num_proc = 2,
     packing = False, # Can make training 5x faster for short sequences.
-    callbacks=[EarlyStoppingCallback(early_stopping_patience=3, early_stopping_threshold=0.01)],
+    callbacks=[EarlyStoppingCallback(early_stopping_patience=EARLY_STOPPING_PATIENCE, early_stopping_threshold=0.0)],
     args = TrainingArguments(
         per_device_train_batch_size = 8,
         gradient_accumulation_steps = 4,
@@ -163,6 +164,8 @@ trainer = SFTTrainer(
         fp16 = not torch.cuda.is_bf16_supported(),
         bf16 = torch.cuda.is_bf16_supported(),
         logging_steps = 20, #Every 20 steps earlystopping threshold will be evaluated
+        eval_steps = 20,
+        save_steps = 20,
         optim = "adamw_8bit",
         report_to = 'wandb',
         weight_decay = 0.01,
@@ -171,7 +174,7 @@ trainer = SFTTrainer(
         output_dir = new_output_dir,
         evaluation_strategy = 'steps',
         load_best_model_at_end = True,
-        save_total_limit=2,
+        save_total_limit=5,
     ),
 )
 

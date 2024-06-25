@@ -18,7 +18,6 @@ class Evaluations():
         
         return round(results["mean_perplexity"], 2)
 
-
     def cossims(self, gt_sentences, pred_sentences):
         embeddings_gt = self.model.encode(gt_sentences)
         embeddings_pred = self.model.encode(pred_sentences)
@@ -32,8 +31,9 @@ class Evaluations():
             all_sentence_combinations.append(round(cos_sim[i][i].item(), 4))
         
         cossim_mean = np.mean(np.array(all_sentence_combinations))
+        cossim_std = np.std(np.array(all_sentence_combinations))
 
-        return all_sentence_combinations, cossim_mean
+        return all_sentence_combinations, cossim_mean, cossim_std
 
     def rouge(self, pred_sentences, gt_sentences):
         rouge = Rouge()
@@ -62,10 +62,9 @@ class Evaluations():
 
         rougel_scores_np = np.array(rougel_scores)
         rougel_mean = np.mean(rougel_scores_np)
+        rougel_std = np.std(rougel_scores_np)
 
-        return rouge_scores, rougel_scores, rougel_mean
-
-
+        return rouge_scores, rougel_scores, rougel_mean, rougel_std
 
 if __name__=='__main__':
     evaluation = Evaluations()
@@ -91,8 +90,8 @@ if __name__=='__main__':
         preds_rs3 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{args.ftype}_{n_instances}_formatted_det_rs_2023.json')
     elif sample_type == 'selectllm':
         preds_rs1 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{args.ftype}_{local_selection_model}_{n_instances}_formatted_det_rs_2021.json')
-        preds_rs2 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{args.ftype}_{local_selection_model}_{n_instances}_formatted_det_rs_2022.json')
-        preds_rs3 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{args.ftype}_{local_selection_model}_{n_instances}_formatted_det_rs_2023.json')
+        preds_rs2 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{local_selection_model}_{n_instances}_formatted_det_rs_2022.json')
+        preds_rs3 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{local_selection_model}_{n_instances}_formatted_det_rs_2023.json')
     else:
         preds_rs1 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{n_instances}_formatted_det_rs_2021.json')
         preds_rs2 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{n_instances}_formatted_det_rs_2022.json')
@@ -112,20 +111,19 @@ if __name__=='__main__':
     
     print('#'*210 + '\n')
     
-    _, _, camel_rouge_l_mean1 = evaluation.rouge(preds1, gts)
-    _, camel_cossims_mean1 = evaluation.cossims(gts, preds1)
-    # camel_perp1 = evaluation.perplexity(preds1)
-    print(f'For {filename}_{data_set}:\n\n rouge1:{camel_rouge_l_mean1} cos1:{camel_cossims_mean1}\n')
+    _, _, camel_rouge_l_mean1, camel_rouge_l_std1 = evaluation.rouge(preds1, gts)
+    _, camel_cossims_mean1, camel_cossims_std1 = evaluation.cossims(gts, preds1)
+    print(f'For {filename}_{data_set}:\n\n rouge1 mean:{camel_rouge_l_mean1}, std:{camel_rouge_l_std1} cos1 mean:{camel_cossims_mean1}, std:{camel_cossims_std1}\n')
 
-    _, _, camel_rouge_l_mean2 = evaluation.rouge(preds2, gts)
-    _, camel_cossims_mean2 = evaluation.cossims(gts, preds2)
-    # camel_perp2 = evaluation.perplexity(preds2)
+    _, _, camel_rouge_l_mean2, camel_rouge_l_std2 = evaluation.rouge(preds2, gts)
+    _, camel_cossims_mean2, camel_cossims_std2 = evaluation.cossims(gts, preds2)
 
-    _, _, camel_rouge_l_mean3 = evaluation.rouge(preds3, gts)
-    _, camel_cossims_mean3 = evaluation.cossims(gts, preds3)
-    # camel_perp3 = evaluation.perplexity(preds3)
+    _, _, camel_rouge_l_mean3, camel_rouge_l_std3 = evaluation.rouge(preds3, gts)
+    _, camel_cossims_mean3, camel_cossims_std3 = evaluation.cossims(gts, preds3)
 
     camel_rouge_l_mean = (camel_rouge_l_mean1 + camel_rouge_l_mean2 + camel_rouge_l_mean3)/3.0
+    camel_rouge_l_std = (camel_rouge_l_std1 + camel_rouge_l_std2 + camel_rouge_l_std3)/3.0
     camel_cossims_mean = (camel_cossims_mean1 + camel_cossims_mean2 + camel_cossims_mean3)/3.0
-    # camel_perp         = (camel_perp1 + camel_perp2 + camel_perp3)/3.0
-    print(f'For {filename}_{data_set}:\n\n rouge1:{camel_rouge_l_mean1} cos1:{camel_cossims_mean1} \n rouge2:{camel_rouge_l_mean2} cos2:{camel_cossims_mean2} \n\n rouge mean:{camel_rouge_l_mean} cossims mean:{camel_cossims_mean}\n\n')
+    camel_cossims_std = (camel_cossims_std1 + camel_cossims_std2 + camel_cossims_std3)/3.0
+
+    print(f'For {filename}_{data_set}:\n\n rouge1 mean:{camel_rouge_l_mean1}, std:{camel_rouge_l_std1} cos1 mean:{camel_cossims_mean1}, std:{camel_cossims_std1} \n rouge2 mean:{camel_rouge_l_mean2}, std:{camel_rouge_l_std2} cos2 mean:{camel_cossims_mean2}, std:{camel_cossims_std2} \n rouge3 mean:{camel_rouge_l_mean3}, std:{camel_rouge_l_std3} cos3 mean:{camel_cossims_mean3}, std:{camel_cossims_std3} \n\n rouge mean:{camel_rouge_l_mean}, std:{camel_rouge_l_std} cossims mean:{camel_cossims_mean}, std:{camel_cossims_std}\n\n')
