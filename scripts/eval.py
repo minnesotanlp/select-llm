@@ -90,8 +90,8 @@ if __name__=='__main__':
         preds_rs3 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{args.ftype}_{n_instances}_formatted_det_rs_2023.json')
     elif sample_type == 'selectllm':
         preds_rs1 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{args.ftype}_{local_selection_model}_{n_instances}_formatted_det_rs_2021.json')
-        preds_rs2 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{local_selection_model}_{n_instances}_formatted_det_rs_2022.json')
-        preds_rs3 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{local_selection_model}_{n_instances}_formatted_det_rs_2023.json')
+        preds_rs2 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{args.ftype}_{local_selection_model}_{n_instances}_formatted_det_rs_2022.json')
+        preds_rs3 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{args.ftype}_{local_selection_model}_{n_instances}_formatted_det_rs_2023.json')
     else:
         preds_rs1 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{n_instances}_formatted_det_rs_2021.json')
         preds_rs2 = preds_dir.joinpath(f'{finetune_model}_{sample_type}_{n_instances}_formatted_det_rs_2022.json')
