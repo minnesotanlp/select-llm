@@ -20,16 +20,12 @@ python -m venv select-llm-venv
 source select-llm-venv/bin/activate
 ```
 
+CURRENT REQUIREMENTS.TXT IS OUTDATED AND WILL BE UPDATED SOON:
+
 Install required packages. (`requirements.txt` includes all submodule packages except flash-atten.)
 
 ```bash
 pip install -r requirements.txt
-```
-
-Additionally, install flash-atten package after installing `requirements.txt`.
-
-```bash
-pip install flash-attn==2.3.0
 ```
 
 Because SelectLLM is based on OPENAI's API, need to create an .env file to save API key.
@@ -59,7 +55,8 @@ python scripts/sampling.py \
 --sample_type random \
 --n_instances 1000 \
 --data_set dolly \
---random_state 2021
+--random_state 2021 \
+--local_model gpt3.5
 ```
 
 ```
@@ -72,6 +69,8 @@ python scripts/sampling.py \
 --random_state: Random Seed Number for reproducibility (eg: 2021, 2022, 2023)
 
 --ftype (Optional): diverse/random/similar for selectllm and perp/length for perplexity/Length based sampling
+
+--local_model: Model to use for Selectllm (Currently: llama/gpt3.5) [llama is llama 3 70B Q8, requires ollama set up]
 ```
 
 Note: Choose ftype as diverse to utilize the SelectLLM algorithm based on our paper
@@ -79,19 +78,20 @@ Note: Choose ftype as diverse to utilize the SelectLLM algorithm based on our pa
 Sampled dataset will be saved under `datasets/sampled/{data_set}/{sampling_type}/{n_instances}/{random_state}`
 
 ## Fine-tuning
-For llama 2 7B model, sign up at and request for weights from: https://llama.meta.com/llama-downloads
 
-User can store model by creating the below defined llama path and model path given in the bash script (Optional). 
+Finetuning is based on the unsloth ai library. 
+
+For llama 2 7B model, can sign up at and request for weights from: https://llama.meta.com/llama-downloads
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python llama2/scripts/finetune.py \
+CUDA_VISIBLE_DEVICES=0 python training/finetune.py \
 --data_path datasets/sampled/dolly/random/1000/2021/sampled_random_1000.parquet.gzip \
 --sample_type random \
 --data_set dolly \
 --n_instances 1000 \
 --random_state 2021 \
---llama_path llama_2_hf/Instructllama-2-7b/ \
---model_path llama_2_hf/llama-2-7b/7bweights
+--mistral_path mistral_directory \
+--finetune_model mistral
 ```
 
 ```
@@ -99,23 +99,28 @@ CUDA_VISIBLE_DEVICES=0 python llama2/scripts/finetune.py \
 
 datasets/sampled/{data_set}/{sampling_type}/{n_instances}/{random_state}/sampled_{sampling_type}_{n_instances}.parquet.gzip
 
---model_path: Path to where the llama 2 HuggingFace converted weights are stored
+or for selectllm sampling by:
 
---llama_path: Directory path where you want the different llama 2 finetuned model weights to be saved
+datasets/sampled/{data_set}/{sampling_type}/{f_type}/{local_model}/{n_instances}/{random_state}/sampled_{sampling_type}_{n_instances}.parquet.gzip 
+
+--mistral_path: Directory where you want the different finetuned model weights to be saved
+
+--finetune_model: Finetuning mistral 7B v0.3 or Llama 2 7B [options: mistral, llama]
 ```
 
 ## Inferences
 
-Generate inferences from the fine-tuned model with the test dataset.
+Generate inferences from the fine-tuned model with the test Dolly or Cleaned Alpaca datasets.
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python llama2/scripts/generate_inferences_finetuned.py \
+CUDA_VISIBLE_DEVICES=0 python training/generate_inferences_testsets.py \
 --sample_type random \
 --data_set dolly \
 --n_instances 1000 \
 --det True \
 --random_state 2021 \
---llama_path llama_2_hf/Instructllama-2-7b
+--mistral_path mistral_directory \
+--finetune_model mistral
 ```
 
 ```bash
@@ -123,11 +128,14 @@ CUDA_VISIBLE_DEVICES=0 python llama2/scripts/generate_inferences_finetuned.py \
 ```
 
 ## Evaluation
-Compare inferences to the ground-truth by cosine similarities, rouge, and perplexity. 3 sets of inferences for each random state (2021, 2022, 2023) need to be generated before running the evaluation.
+Compare inferences to the ground-truth by rouge and cosine similarity (Uncomment code to enable perplexity too). 3 sets of inferences for each random state (2021, 2022, 2023) need to be generated before running the evaluation.
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python scripts/metrics.py \
+CUDA_VISIBLE_DEVICES=0 python scripts/eval.py \
 --data_set dolly \
 --sample_type random \
---n_instances 1000
+--n_instances 1000 \
+--finetune_model mistral
 ```
+
+Evaluation steps on MT-Bench and Alpaca-Eval to be added soon.
