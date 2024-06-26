@@ -9,8 +9,6 @@ from sentence_transformers import SentenceTransformer, util
 class Evaluations():
     def __init__(self):
         self.model = SentenceTransformer('all-MiniLM-L6-v2')
-        self.output_dir = Path(__file__).parent.parent.joinpath('llama_2_hf', 'Instructllama-2-7b')
-        self.model_path = Path(__file__).parent.parent.joinpath('llama-2-7b', '7bweights')
         
     def perplexity(self, pred_sentences):
         perplexity = load("perplexity", module_type="metric")
@@ -111,19 +109,19 @@ if __name__=='__main__':
     
     print('#'*210 + '\n')
     
-    _, _, camel_rouge_l_mean1, camel_rouge_l_std1 = evaluation.rouge(preds1, gts)
-    _, camel_cossims_mean1, camel_cossims_std1 = evaluation.cossims(gts, preds1)
-    print(f'For {filename}_{data_set}:\n\n rouge1 mean:{camel_rouge_l_mean1}, std:{camel_rouge_l_std1} cos1 mean:{camel_cossims_mean1}, std:{camel_cossims_std1}\n')
+    _, _, camel_rouge_l_mean1, _ = evaluation.rouge(preds1, gts)
+    _, camel_cossims_mean1, _ = evaluation.cossims(gts, preds1)
+    print(f'For {filename}_{data_set}:\n\n rouge1 mean:{camel_rouge_l_mean1} cos1 mean:{camel_cossims_mean1}\n')
 
-    _, _, camel_rouge_l_mean2, camel_rouge_l_std2 = evaluation.rouge(preds2, gts)
-    _, camel_cossims_mean2, camel_cossims_std2 = evaluation.cossims(gts, preds2)
+    _, _, camel_rouge_l_mean2, _ = evaluation.rouge(preds2, gts)
+    _, camel_cossims_mean2, _ = evaluation.cossims(gts, preds2)
 
-    _, _, camel_rouge_l_mean3, camel_rouge_l_std3 = evaluation.rouge(preds3, gts)
-    _, camel_cossims_mean3, camel_cossims_std3 = evaluation.cossims(gts, preds3)
+    _, _, camel_rouge_l_mean3, _ = evaluation.rouge(preds3, gts)
+    _, camel_cossims_mean3, _ = evaluation.cossims(gts, preds3)
 
-    camel_rouge_l_mean = (camel_rouge_l_mean1 + camel_rouge_l_mean2 + camel_rouge_l_mean3)/3.0
-    camel_rouge_l_std = (camel_rouge_l_std1 + camel_rouge_l_std2 + camel_rouge_l_std3)/3.0
-    camel_cossims_mean = (camel_cossims_mean1 + camel_cossims_mean2 + camel_cossims_mean3)/3.0
-    camel_cossims_std = (camel_cossims_std1 + camel_cossims_std2 + camel_cossims_std3)/3.0
+    camel_rouge_l_mean = (camel_rouge_l_mean1 + camel_rouge_l_mean2 + camel_rouge_l_mean3) / 3.0
+    camel_rouge_l_std = np.std([camel_rouge_l_mean1, camel_rouge_l_mean2, camel_rouge_l_mean3])
+    camel_cossims_mean = (camel_cossims_mean1 + camel_cossims_mean2 + camel_cossims_mean3) / 3.0
+    camel_cossims_std = np.std([camel_cossims_mean1, camel_cossims_mean2, camel_cossims_mean3])
 
-    print(f'For {filename}_{data_set}:\n\n rouge1 mean:{camel_rouge_l_mean1}, std:{camel_rouge_l_std1} cos1 mean:{camel_cossims_mean1}, std:{camel_cossims_std1} \n rouge2 mean:{camel_rouge_l_mean2}, std:{camel_rouge_l_std2} cos2 mean:{camel_cossims_mean2}, std:{camel_cossims_std2} \n rouge3 mean:{camel_rouge_l_mean3}, std:{camel_rouge_l_std3} cos3 mean:{camel_cossims_mean3}, std:{camel_cossims_std3} \n\n rouge mean:{camel_rouge_l_mean}, std:{camel_rouge_l_std} cossims mean:{camel_cossims_mean}, std:{camel_cossims_std}\n\n')
+    print(f'For {filename}_{data_set}:\n\n rouge1 mean:{camel_rouge_l_mean1} cos1 mean:{camel_cossims_mean1} \n rouge2 mean:{camel_rouge_l_mean2} cos2 mean:{camel_cossims_mean2} \n rouge3 mean:{camel_rouge_l_mean3} cos3 mean:{camel_cossims_mean3} \n\n rouge mean:{camel_rouge_l_mean}, std:{camel_rouge_l_std} cossims mean:{camel_cossims_mean}, std:{camel_cossims_std}\n\n')
