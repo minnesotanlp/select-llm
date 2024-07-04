@@ -14,8 +14,8 @@ from sentence_transformers import SentenceTransformer
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from sklearn.metrics import pairwise_distances, pairwise
 from sklearn.cluster import KMeans
-# from llama_cpp import Llama
-# import ollama
+from llama_cpp import Llama
+import ollama
 import re
 
 openai_config = dotenv_values(Path(__file__).parent.parent.joinpath(".env"))
@@ -128,28 +128,6 @@ class SelectSampler:
         self.mixtral_tokenizer = AutoTokenizer.from_pretrained(self.mixtral_model_id)
         self.mixtral_model = AutoModelForCausalLM.from_pretrained(self.mixtral_model_id, load_in_8bit=True, device_map="auto")
         print('model loaded\n')
-    
-    def _load_llama_model(self):
-        print(f'Loading {self.local_selection_model} model')
-        self.llama_model_id = "meta-llama/Meta-Llama-3-70B-Instruct"
-        self.llama_pipeline = pipeline(
-            "text-generation",
-            model=self.llama_model_id,
-            model_kwargs={"torch_dtype": torch.bfloat16},
-            device_map="auto",
-        )
-        self.llama_tokenizer = self.llama_pipeline.tokenizer
-        print('model loaded\n')
-    
-    def _load_llama_gguf_model(self):
-        print(f'Loading {self.local_selection_model} model')
-        self.llama_model = Llama(
-                model_path="/corpora/InstructTune/cloned_ait/new_repo/models/llama.cpp/models/Meta-Llama-3-70B-Instruct.Q2_K.gguf",
-                n_gpu_layers=-1, # Uncomment to use GPU acceleration
-                seed=self.random_state, # Uncomment to set a specific seed
-                n_ctx=4096, # Uncomment to increase the context window
-                    )
-        print('model loaded\n')
 
     def prompt_local_select(self, dataset_train, indices, num):
         text = ""
@@ -175,7 +153,6 @@ class SelectSampler:
         return text
     
     def call_api_sllm(self, query):
-        # model = "gpt-3.5-turbo-1106"
         model = "gpt-3.5-turbo-0125"
         waiting_time = 0.5
         
@@ -229,46 +206,6 @@ class SelectSampler:
         n_input_tokens = input_ids.shape[1]
         n_output_tokens = outputs.shape[1]
         return answer, n_input_tokens, n_output_tokens
-    
-    def call_llama_sllm(self, query):
-        messages = [
-            {"role": "system", "content": "You are an intelligent chatbot that will carefully answer the user query"},
-            {"role": "user", "content": query},
-        ]
-
-        terminators = [
-            self.llama_tokenizer.eos_token_id,
-            self.llama_tokenizer.convert_tokens_to_ids("<|eot_id|>")
-        ]
-
-        outputs = self.llama_pipeline(
-            messages,
-            max_new_tokens=10,
-            eos_token_id=terminators,
-            do_sample=True,
-            temperature=0.6,
-            top_p=0.9,
-        )
-
-        answer = outputs[0]["generated_text"][-1]['content']
-
-        n_input_tokens = len(self.llama_tokenizer(messages[1]['content'], return_tensors='pt').input_ids[0])
-        n_output_tokens = len(self.llama_tokenizer(answer, return_tensors='pt').input_ids[0])
-
-        return answer, n_input_tokens, n_output_tokens
-    
-    def call_llama_gguf_sllm(self, query):
-        output = self.llama_model(
-                    query, # Prompt
-                    max_tokens=10, # Generate up to 32 tokens, set to None to generate up to the end of the context window
-                    stop=["Q:", "\n"], # Stop generating just before the model would generate a new question
-                    echo=False # Echo the prompt back in the output
-                ) # Generate a completion, can also call create_completion
-        answer = output['choices'][0]['text']
-        n_input_tokens = 0
-        n_output_tokens = 0
-
-        return answer, n_input_tokens, n_output_tokens
 
     def call_ollama_sllm(self, query, num):
         while True:
@@ -288,6 +225,8 @@ class SelectSampler:
                 while answer is None:
                     try:
                         answer = response['message']['content']
+                        n_input_tokens = response.get('prompt_eval_count', 0)
+                        n_output_tokens = response.get('eval_count', 0)
                     except:
                         time.sleep(waiting_time)
                         if waiting_time < 5:
@@ -297,16 +236,13 @@ class SelectSampler:
 
                 if answer is not None:
                     if num == 1:
-                        answer = re.search(r'\[\d+\]', answer).group()
+                        answer = str(re.search(r'\[\d+\]', answer).group())
                     else:
-                        answer = [int(num) for num in re.search(r'\[(\d+(?:\s*,\s*\d+)*)\]', answer).group(1).split(',')]
+                        answer = str([int(num) for num in re.search(r'\[(\d+(?:\s*,\s*\d+)*)\]', answer).group(1).split(',')])
                     break
 
             except Exception as e:
                 print(f'Error occurred: {e}. Retrying...')
-
-        n_input_tokens = 0
-        n_output_tokens = 0
 
         return answer, n_input_tokens, n_output_tokens
     
@@ -351,7 +287,6 @@ class SelectSampler:
             
         res = []
         res_bef = []
-        new_res = []
         
         for i in tqdm(range(len(global_regions))):
             query = self.prompt_local_select(data_train, global_regions[i], local_output)
@@ -371,7 +306,6 @@ class SelectSampler:
                 answer_aft = np.arange(local_output) + 1  
             res_bef.append(list(global_regions[i]))
             res.append(list(global_regions[i][answer_aft]))
-            new_res.append(( list(global_regions[i][answer_aft]), list(global_regions[i]) ))
 
             input_tokens += input_token
             output_tokens += output_token
