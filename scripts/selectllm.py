@@ -88,6 +88,7 @@ class SelectSampler:
         self.ftype = ftype
         self.local_selection_model = local_selection_model
         self._set_seed(self.random_state)
+        self.bad_array_limit = 10
 
         if self.data_set == 'dolly':
             self.n_size = 14
@@ -97,8 +98,6 @@ class SelectSampler:
         self._set_embed()
         if self.local_selection_model == 'mixtral':
             self._load_mixtral_model()
-        # elif self.local_selection_model == 'llama':
-        #     self._load_llama_gguf_model()
     
     def _set_seed(self, random_state):
         deterministic = True
@@ -287,31 +286,48 @@ class SelectSampler:
             
         res = []
         res_bef = []
+        bad_array_count = 0
         
         for i in tqdm(range(len(global_regions))):
             query = self.prompt_local_select(data_train, global_regions[i], local_output)
             
             if self.local_selection_model == 'gpt3.5':
-                answer, input_token, output_token = self.call_api_sllm(query)
+                raw_answer, input_token, output_token = self.call_api_sllm(query)
             elif self.local_selection_model == 'mixtral':
-                answer, input_token, output_token = self.call_mx_sllm(query)
+                raw_answer, input_token, output_token = self.call_mx_sllm(query)
             elif self.local_selection_model == 'llama':
-                answer, input_token, output_token = self.call_ollama_sllm(query, local_output)
+                raw_answer, input_token, output_token = self.call_ollama_sllm(query, local_output)
+            else:
+                raise ValueError(f"Unsupported model: {self.local_selection_model}")
 
+            # Process the raw answer
             try:
-                answer_aft = list(np.array(ast.literal_eval(answer)) - 1)
-                if len(answer_aft) > local_output:
-                    answer_aft = list(np.array(answer_aft)[:local_output])
+                raw_answer_aft = list(np.array(ast.literal_eval(raw_answer)) - 1)
+                if len(raw_answer_aft) > local_output:
+                    raw_answer_aft = list(np.array(raw_answer_aft)[:local_output])
             except:
-                answer_aft = np.arange(local_output) + 1  
+                raw_answer_aft = np.arange(local_output) + 1  
+
+            # Refine the answer
+            answer_aft, bad_array_flag = self._refined_answer(raw_answer_aft, local_output)
+            
             res_bef.append(list(global_regions[i]))
             res.append(list(global_regions[i][answer_aft]))
 
             input_tokens += input_token
             output_tokens += output_token
 
+            # Handle bad arrays
+            if bad_array_flag: 
+                bad_array_count += 1
+                print(f'bad array encountered. Previous:{raw_answer_aft}  Refined:{answer_aft}\n')
+            if bad_array_count > self.bad_array_limit:
+                print(f'Too many bad arrays, stopping execution.')
+                break
+
         print("Total input token: {}".format(input_tokens))
         print("Total output token: {}".format(output_tokens))
+        print("Final Bad array count: {}".format(bad_array_count))
         
         return res, res_bef
     
@@ -442,6 +458,17 @@ class SelectSampler:
         for split in splitted:
             res.append(self._cleaning(split))
         return res
+    
+    def _refined_answer(self, raw_answer, local_outputs):
+        bad_array_flag = False
+        while len(raw_answer) < local_outputs:
+            raw_answer.append(np.random.randint(1, 15))
+            bad_array_flag = True
+        for i,ans in enumerate(raw_answer):
+            if not 0 <= ans <= 13:
+                raw_answer[i] = 13 if ans>13 else 0
+                bad_array_flag = True
+        return raw_answer, bad_array_flag
 
     def __call__(self):
         n_outs = self.n_instances//1000
