@@ -63,7 +63,7 @@ else:
 if not new_output_dir.exists():
     new_output_dir.mkdir(parents=True)
 
-wandb.init(project="SelectLLM_Finetuning", entity="ritikparkar789", name=run_name)
+wandb.init(project="SelectLLM_Finetuning_NoVal", entity="ritikparkar789", name=run_name)
 
 data = pd.read_parquet(dataset_path)
 data = data[["instruction", "input", "output"]]
@@ -112,13 +112,8 @@ model = FastLanguageModel.get_peft_model(
 
 EOS_TOKEN = tokenizer.eos_token
 
-splits = dataset.train_test_split(test_size=0.2)
-train_data = splits['train']
-val_data = splits['test']
-
 #Formatting each instruction as a batch
-train_data = train_data.map(format_instructions_batch, batched = True, fn_kwargs={'eostoken': EOS_TOKEN})
-val_data = val_data.map(format_instructions_batch, batched = True, fn_kwargs={'eostoken': EOS_TOKEN})
+train_data = dataset.map(format_instructions_batch, batched = True, fn_kwargs={'eostoken': EOS_TOKEN})
 
 wandb.watch(model)
 
@@ -126,22 +121,20 @@ trainer = SFTTrainer(
     model = model,
     tokenizer = tokenizer,
     train_dataset=train_data,
-    eval_dataset = val_data,
     dataset_text_field = "text",
     max_seq_length = max_seq_length,
     dataset_num_proc = 2,
     packing = False, # Can make training 5x faster for short sequences.
-    callbacks=[EarlyStoppingCallback(early_stopping_patience=EARLY_STOPPING_PATIENCE, early_stopping_threshold=0.0)],
     args = TrainingArguments(
         per_device_train_batch_size = 8,
         gradient_accumulation_steps = 4,
         warmup_steps = 5,
-        max_steps = MAX_STEPS,
+        num_train_epochs=3,
         learning_rate = 2e-4,
         fp16 = not torch.cuda.is_bf16_supported(),
         bf16 = torch.cuda.is_bf16_supported(),
-        logging_steps = 20, #Every 20 steps earlystopping threshold will be evaluated
-        eval_steps = 20,
+        logging_steps = 1,
+        save_strategy='steps',
         save_steps = 20,
         optim = "adamw_8bit",
         report_to = 'wandb',
@@ -149,9 +142,7 @@ trainer = SFTTrainer(
         lr_scheduler_type = "linear",
         seed = random_state,
         output_dir = new_output_dir,
-        evaluation_strategy = 'steps',
-        load_best_model_at_end = True,
-        save_total_limit=5,
+        save_total_limit=3,
     ),
 )
 
