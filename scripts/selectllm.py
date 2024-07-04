@@ -15,6 +15,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from sklearn.metrics import pairwise_distances, pairwise
 from sklearn.cluster import KMeans
 from llama_cpp import Llama
+from collections import defaultdict
 import ollama
 import re
 
@@ -277,16 +278,16 @@ class SelectSampler:
     def selectllm_final(self, data_train, train_embeddings, local_output, n_outputs, g_pre=False):
         n_samples = len(train_embeddings)
         region_size = math.ceil(n_samples / n_outputs)
-        input_tokens, output_tokens = 0, 0 
         
         if g_pre:
             global_regions = np.array(g_pre).astype(np.int64)
         else:
             global_regions = self.get_diverse_kmeans(train_embeddings, region_size, n_outputs)
             
-        res = []
-        res_bef = []
+        res, res_bef = [], []
+        input_tokens, output_tokens = 0, 0 
         bad_array_count = 0
+        indices_count = defaultdict(int)
         
         for i in tqdm(range(len(global_regions))):
             query = self.prompt_local_select(data_train, global_regions[i], local_output)
@@ -310,6 +311,9 @@ class SelectSampler:
 
             # Refine the answer
             answer_aft, bad_array_flag = self._refined_answer(raw_answer_aft, local_output)
+
+            for selected_ind in answer_aft:
+                indices_count[selected_ind] += 1
             
             res_bef.append(list(global_regions[i]))
             res.append(list(global_regions[i][answer_aft]))
@@ -328,6 +332,7 @@ class SelectSampler:
         print("Total input token: {}".format(input_tokens))
         print("Total output token: {}".format(output_tokens))
         print("Final Bad array count: {}".format(bad_array_count))
+        print(f'Selected Indices count is: {dict(indices_count)}')
         
         return res, res_bef
     
